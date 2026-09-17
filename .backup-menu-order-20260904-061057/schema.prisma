@@ -1,0 +1,302 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                                 String         @id @default(cuid())
+  phone                              String         @unique
+  name                               String?
+  role                               UserRole       @default(CUSTOMER)
+  isActive                           Boolean        @default(true)
+  createdAt                          DateTime       @default(now())
+  updatedAt                          DateTime       @updatedAt
+  passwordHash                       String?
+
+  AuditLog                           AuditLog[]
+  Booking_Booking_approvedByIdToUser Booking[]      @relation("Booking_approvedByIdToUser")
+  bookings                           Booking[]
+  menuOrders                         MenuOrder[]
+  OtpChallenge                       OtpChallenge[]
+  Payment                            Payment[]
+  Session                            Session[]
+}
+
+model Resource {
+  id           String         @id @default(cuid())
+  name         String
+  code         String         @unique
+  type         ResourceType
+  status       ResourceStatus @default(AVAILABLE)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  bookingItems BookingItem[]
+  Session      Session[]
+
+  @@index([type, status, isActive])
+}
+
+model Pricing {
+  id           String       @id @default(cuid())
+  resourceType ResourceType @unique
+  pricePerHour Int
+  minMinutes   Int          @default(30)
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Booking {
+  id                              String        @id @default(cuid())
+  bookingNumber                  String        @unique
+  userId                          String
+  status                          BookingStatus @default(PENDING)
+  startAt                         DateTime
+  endAt                           DateTime
+  totalAmount                     Int
+  customerNote                    String?
+  expiresAt                       DateTime?
+  approvedAt                      DateTime?
+  approvedById                    String?
+  cancelledAt                     DateTime?
+  rejectionReason                 String?
+  createdAt                       DateTime      @default(now())
+  updatedAt                       DateTime      @updatedAt
+
+  User_Booking_approvedByIdToUser User?         @relation("Booking_approvedByIdToUser", fields: [approvedById], references: [id])
+  user                            User          @relation(fields: [userId], references: [id])
+  items                           BookingItem[]
+  invoices                        Invoice?
+  Payment                         Payment[]
+  Session                         Session[]
+
+  @@index([startAt, endAt])
+  @@index([status, expiresAt])
+  @@index([userId, startAt])
+}
+
+model BookingItem {
+  id              String       @id @default(cuid())
+  bookingId       String
+  resourceId      String?
+  resourceType    ResourceType
+  startAt         DateTime
+  endAt           DateTime
+  durationMinutes Int
+  unitPrice       Int
+  totalPrice      Int
+
+  booking         Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  resource        Resource?    @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  Session         Session?
+
+  @@index([resourceId, startAt, endAt])
+  @@index([bookingId])
+}
+
+model MenuItem {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  price       Int
+  imageUrl    String?
+  isAvailable Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
+
+  orderItems  MenuOrderItem[]
+
+  @@index([category, isAvailable])
+}
+
+model MenuOrder {
+  id            String          @id @default(cuid())
+  userId        String?
+  customerName  String
+  phone         String
+  note          String?
+  status        MenuOrderStatus @default(PENDING)
+  totalAmount   Int
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @default(now()) @updatedAt
+  locationType  String?
+  locationLabel String?
+
+  user          User?           @relation(fields: [userId], references: [id])
+  items         MenuOrderItem[]
+
+  @@index([status, createdAt])
+  @@index([phone, createdAt])
+}
+
+model MenuOrderItem {
+  id         String    @id @default(cuid())
+  orderId    String
+  menuItemId String
+  itemName   String
+  unitPrice  Int
+  quantity   Int
+  totalPrice Int
+
+  menuItem   MenuItem  @relation(fields: [menuItemId], references: [id])
+  order      MenuOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  bookingId     String        @unique
+  invoiceNumber String        @unique
+  subtotal      Int
+  discount      Int           @default(0)
+  total         Int
+  paymentStatus PaymentStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+
+  booking       Booking       @relation(fields: [bookingId], references: [id])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  paymentNumber String       @unique
+  bookingId    String
+  sessionId    String?
+  amount       Int
+  method       PaymentMethod
+  status       PaymentStatus @default(PAID)
+  paidAt       DateTime      @default(now())
+  receivedById String?
+
+  Booking      Booking       @relation(fields: [bookingId], references: [id])
+  User         User?         @relation(fields: [receivedById], references: [id])
+  Session      Session?      @relation(fields: [sessionId], references: [id])
+
+  @@index([bookingId, paidAt])
+  @@index([method, paidAt])
+}
+
+model AuditLog {
+  id         String   @id
+  userId     String?
+  action     String
+  entity     String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  User       User?    @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model OtpChallenge {
+  id         String    @id
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  userId     String?
+
+  User       User?     @relation(fields: [userId], references: [id])
+
+  @@index([phone, expiresAt])
+}
+
+model Session {
+  id              String        @id
+  bookingId       String?
+  bookingItemId   String?       @unique
+  resourceId      String
+  status          SessionStatus @default(NOT_STARTED)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  extendedMinutes Int           @default(0)
+  finalAmount     Int?
+  startedById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime
+
+  Payment         Payment[]
+  Booking         Booking?      @relation(fields: [bookingId], references: [id])
+  BookingItem     BookingItem?  @relation(fields: [bookingItemId], references: [id])
+  Resource        Resource      @relation(fields: [resourceId], references: [id])
+  User            User?         @relation(fields: [startedById], references: [id])
+
+  @@index([bookingId])
+  @@index([resourceId, status])
+}
+
+enum UserRole {
+  CUSTOMER
+  CASHIER
+  MANAGER
+  ADMIN
+}
+
+enum ResourceType {
+  PC_NORMAL
+  PC_MASTER
+  PS5
+  CINEMA
+  BILLIARD
+  TABLE
+}
+
+enum ResourceStatus {
+  AVAILABLE
+  RESERVED
+  PLAYING
+  MAINTENANCE
+  DISABLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  REJECTED
+  CANCELLED
+  NO_SHOW
+  EXPIRED
+}
+
+enum MenuOrderStatus {
+  PENDING
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  POS
+  TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  VOIDED
+  REFUNDED
+}
+
+enum SessionStatus {
+  NOT_STARTED
+  ACTIVE
+  ENDED
+}
