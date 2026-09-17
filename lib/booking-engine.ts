@@ -1,21 +1,21 @@
-import {
+[source: 1]import {
   Prisma,
   ResourceType,
   BookingStatus,
   ResourceStatus,
 } from "@prisma/client";
-import { prisma } from "./prisma";
+[source: 1]import { prisma } from "./prisma";
 
-export const MIN_BOOKING_MINUTES = 30;
-export const SLOT_MINUTES = 30;
-export const MAX_BOOKING_DAYS = 7;
-export const PENDING_TTL_MINUTES = 15;
-export const GRACE_PERIOD_MINUTES = 15;
+[source: 1]export const MIN_BOOKING_MINUTES = 30;
+[source: 1]export const SLOT_MINUTES = 30;
+[source: 1]export const MAX_BOOKING_DAYS = 7;
+[source: 1]export const PENDING_TTL_MINUTES = 15;
+[source: 1]export const GRACE_PERIOD_MINUTES = 15;
 
-export const BUSINESS_OPEN_HOUR = 10;
-export const BUSINESS_CLOSE_HOUR = 3;
+[source: 1]export const BUSINESS_OPEN_HOUR = 10;
+[source: 1]export const BUSINESS_CLOSE_HOUR = 3;
 
-export const IRAQ_OFFSET = "+03:00";
+[source: 1]export const IRAQ_OFFSET = "+03:00";
 
 const ACTIVE_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.PENDING,
@@ -23,7 +23,7 @@ const ACTIVE_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.ACTIVE,
 ];
 
-export type BookingRequestItem = {
+[source: 1]export type BookingRequestItem = {
   resourceType: ResourceType;
   startAt: string;
   durationMinutes: number;
@@ -31,7 +31,7 @@ export type BookingRequestItem = {
   resourceIds?: string[];
 };
 
-export type NormalizedBookingItem = {
+[source: 1]export type NormalizedBookingItem = {
   resourceType: ResourceType;
   startAt: Date;
   endAt: Date;
@@ -40,7 +40,7 @@ export type NormalizedBookingItem = {
   resourceIds?: string[];
 };
 
-export class BookingValidationError extends Error {
+[source: 1]export class BookingValidationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BookingValidationError";
@@ -112,7 +112,7 @@ function assertBusinessHours(
    NORMALIZE BOOKING
 ========================================================= */
 
-export function normalizeBookingItems(
+[source: 1]export function normalizeBookingItems(
   items: BookingRequestItem[],
 ): NormalizedBookingItem[] {
   if (
@@ -165,9 +165,9 @@ export function normalizeBookingItems(
 
     const now = new Date();
 
-    // سماحية دقيقتين لتجنب مشكلة فارق التوقيت البسيط بين الهاتف والسيرفر
+    // منح سماحية 10 دقائق لتجنب مشاكل فرق التوقيت البسيط بين أجهزة العملاء والسيرفر
     const thresholdNow = new Date(
-      now.getTime() - 2 * 60_000,
+      now.getTime() - 10 * 60_000,
     );
 
     const latestAllowed = new Date(
@@ -553,7 +553,7 @@ async function generateBookingNumber(
    CREATE PENDING BOOKING
 ========================================================= */
 
-export async function createPendingBooking(
+[source: 1]export async function createPendingBooking(
   userId: string,
   items: BookingRequestItem[],
   customerNote?: string,
@@ -802,7 +802,7 @@ export async function createPendingBooking(
    AVAILABILITY
 ========================================================= */
 
-export async function getAvailability(
+[source: 1]export async function getAvailability(
   resourceType: ResourceType,
   startAt: Date,
   endAt: Date,
@@ -998,7 +998,7 @@ export async function getAvailability(
           const permanentlyUnavailable =
             resource.status ===
               ResourceStatus.MAINTENANCE ||
-            resource.status ===
+              resource.status ===
               ResourceStatus.DISABLED;
 
           const available =
@@ -1031,7 +1031,7 @@ export async function getAvailability(
    IRAQ DATE
 ========================================================= */
 
-export function makeIraqDate(
+[source: 1]export function makeIraqDate(
   date: string,
   time: string,
 ): Date {
@@ -1058,7 +1058,7 @@ export function makeIraqDate(
    BUSINESS DAY SLOTS
 ========================================================= */
 
-export function generateBusinessDaySlots(
+[source: 1]export function generateBusinessDaySlots(
   businessDate: string,
 ): string[] {
   if (
