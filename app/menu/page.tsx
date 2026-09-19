@@ -124,6 +124,18 @@ export default function MenuPage() {
     locationLabel: string;
   } | null>(null);
 
+  // إيقاف تمرير الصفحة بالخلفية عند فتح السلة أو صفحة الدفع
+  useEffect(() => {
+    if (open || checkout || success) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open, checkout, success]);
+
   useEffect(() => {
     fetch(`/api/menu/items?t=${new Date().getTime()}`, {
       cache: "no-store",
@@ -532,56 +544,56 @@ export default function MenuPage() {
           {/* SUCCESS */}
 
           {success && (
-            <div className="nz-order-success">
+            <div className="nz-cart-overlay" style={{ zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="nz-order-success">
+                <div className="nz-success-icon">
+                  ✓
+                </div>
 
-              <div className="nz-success-icon">
-                ✓
-              </div>
+                <h2>
+                  تم إرسال طلبك بنجاح
+                </h2>
 
-              <h2>
-                تم إرسال طلبك بنجاح
-              </h2>
+                <p>
+                  رقم الطلب:{" "}
+                  <b>
+                    {success.id
+                      .slice(-8)
+                      .toUpperCase()}
+                  </b>
+                </p>
 
-              <p>
-                رقم الطلب:{" "}
-                <b>
-                  {success.id
-                    .slice(-8)
-                    .toUpperCase()}
-                </b>
-              </p>
+                <p>
+                  المجموع:{" "}
+                  <b>
+                    {money(
+                      success.total
+                    )}
+                  </b>
+                </p>
 
-              <p>
-                المجموع:{" "}
-                <b>
-                  {money(
-                    success.total
+                <p>
+                  📍 المكان:{" "}
+                  <b>
+                    {success.locationLabel}
+                  </b>
+                </p>
+
+                <span>
+                  {statusLabel(
+                    success.status
                   )}
-                </b>
-              </p>
+                </span>
 
-              <p>
-                📍 المكان:{" "}
-                <b>
-                  {success.locationLabel}
-                </b>
-              </p>
-
-              <span>
-                {statusLabel(
-                  success.status
-                )}
-              </span>
-
-              <button
-                className="nz-btn nz-btn-primary"
-                onClick={() =>
-                  setSuccess(null)
-                }
-              >
-                تمام
-              </button>
-
+                <button
+                  className="nz-btn nz-btn-primary"
+                  onClick={() =>
+                    setSuccess(null)
+                  }
+                >
+                  تمام
+                </button>
+              </div>
             </div>
           )}
 
@@ -591,15 +603,17 @@ export default function MenuPage() {
           {open && (
             <div
               className="nz-cart-overlay"
+              style={{ zIndex: 999999, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
               onMouseDown={(e) =>
                 e.currentTarget ===
                   e.target &&
                 setOpen(false)
               }
             >
-              <aside className="nz-cart" style={{ paddingBottom: "100px" }}>
+              <aside className="nz-cart" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden' }}>
 
-                <div className="nz-cart-head">
+                {/* رأس السلة الثابت لمنع القص */}
+                <div className="nz-cart-head" style={{ padding: '20px 20px 10px', flexShrink: 0 }}>
                   <h2>
                     سلة الطلب
                   </h2>
@@ -613,98 +627,101 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                {cart.length === 0 ? (
-                  <div className="nz-cart-empty">
-                    <span>🛒</span>
+                {/* محتوى السلة القابل للتمرير */}
+                <div style={{ overflowY: 'auto', padding: '0 20px 100px', flex: 1 }}>
+                  {cart.length === 0 ? (
+                    <div className="nz-cart-empty">
+                      <span>🛒</span>
 
-                    <h3>
-                      السلة فارغة
-                    </h3>
+                      <h3>
+                        السلة فارغة
+                      </h3>
 
-                    <p>
-                      أضف وجبة أو سناك
-                      أو مشروب حتى ترسل
-                      طلبك.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="nz-cart-lines">
-
-                      {cart.map((x) => (
-                        <div
-                          className="nz-cart-line"
-                          key={x.id}
-                        >
-                          <div>
-                            <b>
-                              {x.name}
-                            </b>
-
-                            <small>
-                              {money(
-                                x.price
-                              )}{" "}
-                              ×{" "}
-                              {x.quantity}
-                            </small>
-                          </div>
-
-                          <div className="nz-qty">
-
-                            <button
-                              onClick={() =>
-                                change(
-                                  x.id,
-                                  -1
-                                )
-                              }
-                            >
-                              −
-                            </button>
-
-                            <b>
-                              {x.quantity}
-                            </b>
-
-                            <button
-                              onClick={() =>
-                                change(
-                                  x.id,
-                                  1
-                                )
-                              }
-                            >
-                              +
-                            </button>
-
-                          </div>
-                        </div>
-                      ))}
-
+                      <p>
+                        أضف وجبة أو سناك
+                        أو مشروب حتى ترسل
+                        طلبك.
+                      </p>
                     </div>
+                  ) : (
+                    <>
+                      <div className="nz-cart-lines">
 
-                    <div className="nz-cart-total">
-                      <span>
-                        المجموع
-                      </span>
+                        {cart.map((x) => (
+                          <div
+                            className="nz-cart-line"
+                            key={x.id}
+                          >
+                            <div>
+                              <b>
+                                {x.name}
+                              </b>
 
-                      <b>
-                        {money(total)}
-                      </b>
-                    </div>
+                              <small>
+                                {money(
+                                  x.price
+                                )}{" "}
+                                ×{" "}
+                                {x.quantity}
+                              </small>
+                            </div>
 
-                    <button
-                      className="nz-btn nz-btn-primary nz-cart-submit"
-                      onClick={() => {
-                        setOpen(false);
-                        setCheckout(true);
-                      }}
-                    >
-                      متابعة وإرسال الطلب
-                    </button>
-                  </>
-                )}
+                            <div className="nz-qty">
+
+                              <button
+                                onClick={() =>
+                                  change(
+                                    x.id,
+                                    -1
+                                  )
+                                }
+                              >
+                                −
+                              </button>
+
+                              <b>
+                                {x.quantity}
+                              </b>
+
+                              <button
+                                onClick={() =>
+                                  change(
+                                    x.id,
+                                    1
+                                  )
+                                }
+                              >
+                                +
+                              </button>
+
+                            </div>
+                          </div>
+                        ))}
+
+                      </div>
+
+                      <div className="nz-cart-total">
+                        <span>
+                          المجموع
+                        </span>
+
+                        <b>
+                          {money(total)}
+                        </b>
+                      </div>
+
+                      <button
+                        className="nz-btn nz-btn-primary nz-cart-submit"
+                        onClick={() => {
+                          setOpen(false);
+                          setCheckout(true);
+                        }}
+                      >
+                        متابعة وإرسال الطلب
+                      </button>
+                    </>
+                  )}
+                </div>
 
               </aside>
             </div>
@@ -716,15 +733,17 @@ export default function MenuPage() {
           {checkout && (
             <div 
               className="nz-cart-overlay"
+              style={{ zIndex: 999999, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
               onMouseDown={(e) =>
                 e.currentTarget ===
                   e.target &&
                 setCheckout(false)
               }
             >
-              <aside className="nz-checkout" style={{ paddingBottom: "130px" }}>
+              <aside className="nz-checkout" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
 
-                <div className="nz-cart-head">
+                {/* رأس الدفع الثابت لمنع القص */}
+                <div className="nz-cart-head" style={{ padding: '20px 20px 10px', flexShrink: 0 }}>
                   <h2>
                     بيانات الطلب
                   </h2>
@@ -738,255 +757,258 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                <p>
-                  أدخل بياناتك ومكان جلوسك حتى
-                  يعرف الكاشير والويتر أين يوصلون
-                  الطلب.
-                </p>
+                {/* محتوى بيانات الطلب القابل للتمرير */}
+                <div style={{ overflowY: 'auto', padding: '0 20px 100px', flex: 1 }}>
+                  <p>
+                    أدخل بياناتك ومكان جلوسك حتى
+                    يعرف الكاشير والويتر أين يوصلون
+                    الطلب.
+                  </p>
 
 
-                {/* NAME */}
+                  {/* NAME */}
 
-                <label>
-                  الاسم
+                  <label>
+                    الاسم
 
-                  <input
-                    value={name}
-                    onChange={(e) =>
-                      setName(
-                        e.target.value
-                      )
-                    }
-                    placeholder="اسمك"
-                    maxLength={80}
-                  />
-                </label>
-
-
-                {/* PHONE */}
-
-                <label>
-                  رقم الهاتف
-
-                  <input
-                    value={phone}
-                    onChange={(e) =>
-                      setPhone(
-                        e.target.value
-                          .replace(
-                            /\D/g,
-                            ""
-                          )
-                          .slice(
-                            0,
-                            11
-                          )
-                      )
-                    }
-                    placeholder="07XXXXXXXXX"
-                    inputMode="numeric"
-                  />
-                </label>
+                    <input
+                      value={name}
+                      onChange={(e) =>
+                        setName(
+                          e.target.value
+                        )
+                      }
+                      placeholder="اسمك"
+                      maxLength={80}
+                    />
+                  </label>
 
 
-                {/* LOCATION */}
+                  {/* PHONE */}
 
-                <div className="nz-location-box">
+                  <label>
+                    رقم الهاتف
 
-                  <div className="nz-location-heading">
-                    <strong>
-                      📍 أين تريد استلام طلبك؟
-                    </strong>
-
-                    <span>
-                      حدد مكانك داخل المركز
-                    </span>
-                  </div>
-
-
-                  {/* LOCATION TYPES */}
-
-                  <div className="nz-location-types">
-
-                    {locations.map(
-                      (location) => (
-                        <button
-                          type="button"
-                          key={
-                            location.type
-                          }
-                          className={
-                            locationType ===
-                            location.type
-                              ? "active"
-                              : ""
-                          }
-                          onClick={() =>
-                            selectLocationType(
-                              location.type
+                    <input
+                      value={phone}
+                      onChange={(e) =>
+                        setPhone(
+                          e.target.value
+                            .replace(
+                              /\D/g,
+                              ""
                             )
-                          }
-                        >
+                            .slice(
+                              0,
+                              11
+                            )
+                        )
+                      }
+                      placeholder="07XXXXXXXXX"
+                      inputMode="numeric"
+                    />
+                  </label>
+
+
+                  {/* LOCATION */}
+
+                  <div className="nz-location-box">
+
+                    <div className="nz-location-heading">
+                      <strong>
+                        📍 أين تريد استلام طلبك؟
+                      </strong>
+
+                      <span>
+                        حدد مكانك داخل المركز
+                      </span>
+                    </div>
+
+
+                    {/* LOCATION TYPES */}
+
+                    <div className="nz-location-types">
+
+                      {locations.map(
+                        (location) => (
+                          <button
+                            type="button"
+                            key={
+                              location.type
+                            }
+                            className={
+                              locationType ===
+                              location.type
+                                ? "active"
+                                : ""
+                            }
+                            onClick={() =>
+                              selectLocationType(
+                                location.type
+                              )
+                            }
+                          >
+
+                            <span>
+                              {
+                                location.icon
+                              }
+                            </span>
+
+                            <strong>
+                              {
+                                location.type
+                              }
+                            </strong>
+
+                            <small>
+                              {
+                                location.description
+                              }
+                            </small>
+
+                          </button>
+                        )
+                      )}
+
+                    </div>
+
+
+                    {/* LOCATION OPTIONS */}
+
+                    {locationType && (
+                      <div className="nz-location-options">
+
+                        <div className="nz-location-options-title">
+                          <strong>
+                            اختر المكان
+                          </strong>
 
                           <span>
-                            {
-                              location.icon
-                            }
+                            {locationType}
                           </span>
+                        </div>
+
+
+                        <div className="nz-location-grid">
+
+                          {locations
+                            .find(
+                              (x) =>
+                                x.type ===
+                                locationType
+                            )
+                            ?.options.map(
+                              (option) => (
+                                <button
+                                  type="button"
+                                  key={
+                                    option
+                                  }
+                                  className={
+                                    locationLabel ===
+                                    option
+                                      ? "active"
+                                      : ""
+                                  }
+                                  onClick={() => {
+                                    setLocationLabel(
+                                      option
+                                    );
+                                    setError(
+                                      ""
+                                    );
+                                  }}
+                                >
+                                  {option}
+                                </button>
+                              )
+                            )}
+
+                        </div>
+
+                      </div>
+                    )}
+
+
+                    {/* SELECTED */}
+
+                    {locationLabel && (
+                      <div className="nz-selected-location">
+
+                        <span>
+                          ✓
+                        </span>
+
+                        <div>
+                          <small>
+                            مكان استلام الطلب
+                          </small>
 
                           <strong>
                             {
-                              location.type
+                              locationLabel
                             }
                           </strong>
+                        </div>
 
-                          <small>
-                            {
-                              location.description
-                            }
-                          </small>
-
-                        </button>
-                      )
+                      </div>
                     )}
 
                   </div>
 
 
-                  {/* LOCATION OPTIONS */}
+                  {/* NOTE */}
 
-                  {locationType && (
-                    <div className="nz-location-options">
+                  <label>
+                    ملاحظة{" "}
+                    <small>
+                      اختياري
+                    </small>
 
-                      <div className="nz-location-options-title">
-                        <strong>
-                          اختر المكان
-                        </strong>
+                    <textarea
+                      value={note}
+                      onChange={(e) =>
+                        setNote(
+                          e.target.value
+                        )
+                      }
+                      maxLength={500}
+                      placeholder="مثلاً: بدون بصل..."
+                    />
+                  </label>
 
-                        <span>
-                          {locationType}
-                        </span>
-                      </div>
 
-
-                      <div className="nz-location-grid">
-
-                        {locations
-                          .find(
-                            (x) =>
-                              x.type ===
-                              locationType
-                          )
-                          ?.options.map(
-                            (option) => (
-                              <button
-                                type="button"
-                                key={
-                                  option
-                                }
-                                className={
-                                  locationLabel ===
-                                  option
-                                    ? "active"
-                                    : ""
-                                }
-                                onClick={() => {
-                                  setLocationLabel(
-                                    option
-                                  );
-                                  setError(
-                                    ""
-                                  );
-                                }}
-                              >
-                                {option}
-                              </button>
-                            )
-                          )}
-
-                      </div>
-
+                  {error && (
+                    <div className="nz-menu-error">
+                      {error}
                     </div>
                   )}
 
 
-                  {/* SELECTED */}
+                  {/* TOTAL */}
 
-                  {locationLabel && (
-                    <div className="nz-selected-location">
+                  <div className="nz-cart-total">
+                    <span>
+                      المجموع
+                    </span>
 
-                      <span>
-                        ✓
-                      </span>
-
-                      <div>
-                        <small>
-                          مكان استلام الطلب
-                        </small>
-
-                        <strong>
-                          {
-                            locationLabel
-                          }
-                        </strong>
-                      </div>
-
-                    </div>
-                  )}
-
-                </div>
-
-
-                {/* NOTE */}
-
-                <label>
-                  ملاحظة{" "}
-                  <small>
-                    اختياري
-                  </small>
-
-                  <textarea
-                    value={note}
-                    onChange={(e) =>
-                      setNote(
-                        e.target.value
-                      )
-                    }
-                    maxLength={500}
-                    placeholder="مثلاً: بدون بصل..."
-                  />
-                </label>
-
-
-                {error && (
-                  <div className="nz-menu-error">
-                    {error}
+                    <b>
+                      {money(total)}
+                    </b>
                   </div>
-                )}
 
 
-                {/* TOTAL */}
-
-                <div className="nz-cart-total">
-                  <span>
-                    المجموع
-                  </span>
-
-                  <b>
-                    {money(total)}
-                  </b>
+                  <button
+                    className="nz-btn nz-btn-primary nz-cart-submit"
+                    disabled={busy}
+                    onClick={submit}
+                  >
+                    {busy
+                      ? "جاري الإرسال..."
+                      : "إرسال الطلب للكاشير"}
+                  </button>
                 </div>
-
-
-                <button
-                  className="nz-btn nz-btn-primary nz-cart-submit"
-                  disabled={busy}
-                  onClick={submit}
-                >
-                  {busy
-                    ? "جاري الإرسال..."
-                    : "إرسال الطلب للكاشير"}
-                </button>
 
               </aside>
 
