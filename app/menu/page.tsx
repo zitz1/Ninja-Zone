@@ -330,7 +330,7 @@ export default function MenuPage() {
   return (
     <>
       <CustomerShell>
-        <main className="nz-container nz-page-shell nz-menu-modern" style={{ paddingBottom: "220px" }}>
+        <main className="nz-container nz-page-shell nz-menu-modern" style={{ paddingBottom: "140px" }}>
 
           {/* HEADER */}
 
@@ -591,14 +591,13 @@ export default function MenuPage() {
           {open && (
             <div
               className="nz-cart-overlay"
-              style={{ alignItems: "flex-end", paddingBottom: "100px" }}
               onMouseDown={(e) =>
                 e.currentTarget ===
                   e.target &&
                 setOpen(false)
               }
             >
-              <aside className="nz-cart" style={{ paddingBottom: "140px", maxHeight: "80vh", overflowY: "auto" }}>
+              <aside className="nz-cart" style={{ paddingBottom: "100px" }}>
 
                 <div className="nz-cart-head">
                   <h2>
@@ -697,10 +696,10 @@ export default function MenuPage() {
 
                     <button
                       className="nz-btn nz-btn-primary nz-cart-submit"
-                      onClick={() =>
-                        setCheckout(true)
-                      }
-                      style={{ marginBottom: "60px" }}
+                      onClick={() => {
+                        setOpen(false);
+                        setCheckout(true);
+                      }}
                     >
                       متابعة وإرسال الطلب
                     </button>
@@ -715,9 +714,15 @@ export default function MenuPage() {
           {/* CHECKOUT */}
 
           {checkout && (
-            <div className="nz-cart-overlay" style={{ alignItems: "flex-end", paddingBottom: "100px", zIndex: 100 }}>
-
-              <aside className="nz-checkout" style={{ paddingBottom: "180px", maxHeight: "80vh", overflowY: "auto" }}>
+            <div 
+              className="nz-cart-overlay"
+              onMouseDown={(e) =>
+                e.currentTarget ===
+                  e.target &&
+                setCheckout(false)
+              }
+            >
+              <aside className="nz-checkout" style={{ paddingBottom: "130px" }}>
 
                 <div className="nz-cart-head">
                   <h2>
@@ -977,7 +982,6 @@ export default function MenuPage() {
                   className="nz-btn nz-btn-primary nz-cart-submit"
                   disabled={busy}
                   onClick={submit}
-                  style={{ marginBottom: "80px" }}
                 >
                   {busy
                     ? "جاري الإرسال..."
