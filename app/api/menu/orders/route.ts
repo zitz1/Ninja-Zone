@@ -34,6 +34,16 @@ function unauthorized() {
   );
 }
 
+// دالة لتوليد رقم طلب مميز وقصير
+function generateOrderNumber() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = 'NZ-';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 /* =========================================================
    GET — Cashier/Admin only
    ========================================================= */
@@ -352,16 +362,11 @@ export async function POST(request: Request) {
     const orderId =
       randomUUID();
 
-    let orderNumber =
-      "";
+    // توليد رقم الطلب هنا بدلاً من انتظار قاعدة البيانات
+    const orderNumber = generateOrderNumber();
 
     await prisma.$transaction(
       async (tx) => {
-        /*
-         * مهم:
-         * نستخدم INSERT ... RETURNING حتى نأخذ
-         * orderNumber الذي يولده PostgreSQL تلقائياً.
-         */
         const inserted =
           await tx.$queryRaw<
             Array<{
@@ -371,6 +376,7 @@ export async function POST(request: Request) {
             INSERT INTO "MenuOrder"
             (
               "id",
+              "orderNumber", /* أضفنا الحقل هنا */
               "customerName",
               "phone",
               "note",
@@ -384,6 +390,7 @@ export async function POST(request: Request) {
             VALUES
             (
               ${orderId},
+              ${orderNumber}, /* أضفنا القيمة هنا */
               ${customerName},
               ${phone},
               ${note},
@@ -405,9 +412,6 @@ export async function POST(request: Request) {
             "تعذر إنشاء رقم الطلب.",
           );
         }
-
-        orderNumber =
-          inserted[0].orderNumber;
 
         /* =================================================
            CREATE ORDER ITEMS
