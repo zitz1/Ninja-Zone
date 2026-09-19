@@ -141,9 +141,6 @@ async function main() {
   // =========================
   // Seed menu
   // =========================
-  // Use SQL for menu seeding so a stale local Prisma client cannot make
-  // prisma.menuItem undefined. The database remains the single source of truth.
-
   for (const [category, name, description, price, emoji] of menu) {
     const existing = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT "id"
@@ -183,6 +180,7 @@ async function main() {
             ${randomUUID()},
             ${name},
             ${description},
+            ${category},
             ${price},
             ${emoji},
             true,

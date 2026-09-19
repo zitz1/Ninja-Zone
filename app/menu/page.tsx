@@ -78,7 +78,6 @@ const statusLabel = (s: string) =>
     CANCELLED: "ملغي",
   }[s] || s);
 
-// --- دالة الإيموجيات الذكية للإحتياط ---
 const getItemEmoji = (name: string, category: string) => {
   const n = name ? name.toLowerCase() : "";
   if (n.includes("دونات")) return "🍩";
@@ -126,7 +125,6 @@ export default function MenuPage() {
   } | null>(null);
 
   useEffect(() => {
-    // كسر الكاش لضمان جلب البيانات الحديثة
     fetch(`/api/menu/items?t=${new Date().getTime()}`, {
       cache: "no-store",
     })
@@ -332,7 +330,7 @@ export default function MenuPage() {
   return (
     <>
       <CustomerShell>
-        <main className="nz-container nz-page-shell nz-menu-modern">
+        <main className="nz-container nz-page-shell nz-menu-modern" style={{ paddingBottom: "220px" }}>
 
           {/* HEADER */}
 
@@ -465,18 +463,14 @@ export default function MenuPage() {
 
             <div className="nz-menu-items">
               {shown.map((item) => {
-                
-                // --- المعالجة السحرية للرابط والوصف ---
                 let actualImg = item.imageUrl;
                 let actualDesc = item.description;
 
-                // 1. تنظيف الوصف: إذا كان الوصف يحتوي على رابط بالغلط، ننقله للصورة ونفرغ الوصف
                 if (actualDesc && (actualDesc.includes("uploads") || actualDesc.includes("http") || actualDesc.includes("data:image"))) {
                   actualImg = actualDesc;
                   actualDesc = null; 
                 }
 
-                // 2. تصليح الرابط: إضافة سلاش / إذا كان مفقوداً
                 if (actualImg && !actualImg.startsWith("/") && !actualImg.startsWith("http") && !actualImg.startsWith("data:")) {
                   actualImg = "/" + actualImg;
                 }
@@ -493,7 +487,6 @@ export default function MenuPage() {
                         alt={item.name} 
                         style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" }}
                         onError={(e) => {
-                          // إظهار الإيموجي إذا كانت الصورة مكسورة
                           (e.target as HTMLElement).style.display = "none";
                           const parent = (e.target as HTMLElement).parentElement;
                           if (parent) {
@@ -509,7 +502,6 @@ export default function MenuPage() {
                   <div className="nz-order-info">
                     <h3>{item.name}</h3>
 
-                    {/* لا نعرض الوصف إلا إذا كان حقيقياً (ليس رابطاً) */}
                     {actualDesc && (
                       <p>
                         {actualDesc}
@@ -599,13 +591,14 @@ export default function MenuPage() {
           {open && (
             <div
               className="nz-cart-overlay"
+              style={{ alignItems: "flex-end", paddingBottom: "100px" }}
               onMouseDown={(e) =>
                 e.currentTarget ===
                   e.target &&
                 setOpen(false)
               }
             >
-              <aside className="nz-cart">
+              <aside className="nz-cart" style={{ paddingBottom: "140px", maxHeight: "80vh", overflowY: "auto" }}>
 
                 <div className="nz-cart-head">
                   <h2>
@@ -707,6 +700,7 @@ export default function MenuPage() {
                       onClick={() =>
                         setCheckout(true)
                       }
+                      style={{ marginBottom: "60px" }}
                     >
                       متابعة وإرسال الطلب
                     </button>
@@ -721,9 +715,9 @@ export default function MenuPage() {
           {/* CHECKOUT */}
 
           {checkout && (
-            <div className="nz-cart-overlay">
+            <div className="nz-cart-overlay" style={{ alignItems: "flex-end", paddingBottom: "100px", zIndex: 100 }}>
 
-              <aside className="nz-checkout">
+              <aside className="nz-checkout" style={{ paddingBottom: "180px", maxHeight: "80vh", overflowY: "auto" }}>
 
                 <div className="nz-cart-head">
                   <h2>
@@ -983,6 +977,7 @@ export default function MenuPage() {
                   className="nz-btn nz-btn-primary nz-cart-submit"
                   disabled={busy}
                   onClick={submit}
+                  style={{ marginBottom: "80px" }}
                 >
                   {busy
                     ? "جاري الإرسال..."

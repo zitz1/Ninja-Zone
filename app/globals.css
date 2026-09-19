@@ -345,3 +345,10 @@
     width: 100% !important;
   }
 }
+/* رفع كل الأزرار وصناديق الطلب لتكون فوق الشريط السفلي دائماً */
+.nz-checkout, .nz-cart, .nz-cart-submit {
+  margin-bottom: 90px !important;
+}
+body {
+  padding-bottom: 120px !important;
+}
