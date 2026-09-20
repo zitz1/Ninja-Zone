@@ -170,10 +170,6 @@ export async function POST(request: Request) {
 
     const rawItems = body?.items;
 
-    /* =====================================================
-       VALIDATION
-       ===================================================== */
-
     if (customerName.length < 2) {
       return NextResponse.json(
         { error: "اكتب اسمك بشكل صحيح." },
@@ -223,10 +219,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /* =====================================================
-       NORMALIZE REQUESTED ITEMS
-       ===================================================== */
-
     const requested = new Map<string, number>();
 
     for (const row of rawItems) {
@@ -264,10 +256,6 @@ export async function POST(request: Request) {
       ...requested.keys(),
     ];
 
-    /* =====================================================
-       LOAD AVAILABLE MENU ITEMS
-       ===================================================== */
-
     const menuItems =
       await prisma.$queryRaw<
         Array<{
@@ -304,10 +292,6 @@ export async function POST(request: Request) {
       ]),
     );
 
-    /* =====================================================
-       BUILD ORDER ITEMS
-       ===================================================== */
-
     const orderItems = ids.map(
       (id) => {
         const item =
@@ -334,10 +318,6 @@ export async function POST(request: Request) {
       },
     );
 
-    /* =====================================================
-       TOTAL
-       ===================================================== */
-
     const totalAmount =
       orderItems.reduce(
         (sum, item) =>
@@ -345,16 +325,11 @@ export async function POST(request: Request) {
         0,
       );
 
-    /* =====================================================
-       CREATE ORDER (DAILY SEQUENTIAL NUMBER)
-       ===================================================== */
-
     const orderId = randomUUID();
     let orderNumber = "";
 
     await prisma.$transaction(
       async (tx) => {
-        // حساب بداية اليوم الحالي لحساب تسلسل اليوم
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
@@ -365,7 +340,6 @@ export async function POST(request: Request) {
         `;
 
         const dailyCount = Number(countRows[0]?.count ?? 0) + 1;
-        // الترقيم اليومي التلقائي: #001، #002، #003...
         orderNumber = `#${String(dailyCount).padStart(3, "0")}`;
 
         const inserted =
@@ -414,10 +388,6 @@ export async function POST(request: Request) {
           );
         }
 
-        /* =================================================
-           CREATE ORDER ITEMS
-           ================================================= */
-
         for (const item of orderItems) {
           await tx.$executeRaw`
             INSERT INTO "MenuOrderItem"
@@ -444,10 +414,6 @@ export async function POST(request: Request) {
         }
       },
     );
-
-    /* =====================================================
-       RESPONSE
-       ===================================================== */
 
     return NextResponse.json(
       {
@@ -487,7 +453,7 @@ export async function POST(request: Request) {
 }
 
 /* =========================================================
-   PATCH — Cashier/Admin only
+   PATCH — Cashier/Admin only (مع احتساب الإيرادات تلقائياً)
    ========================================================= */
 export async function PATCH(
   request: Request,
@@ -545,6 +511,8 @@ export async function PATCH(
         Array<{
           id: string;
           status: string;
+          totalAmount: number;
+          orderNumber: string;
           updatedAt: Date;
         }>
       >`
@@ -560,6 +528,8 @@ export async function PATCH(
         RETURNING
           "id",
           "status",
+          "totalAmount",
+          "orderNumber",
           "updatedAt"
       `;
 
@@ -573,6 +543,42 @@ export async function PATCH(
         },
         { status: 404 },
       );
+    }
+
+    // إذا تحولت الحالة إلى "COMPLETED - تم التسليم"، يتم احتسابها كإيرادات نقدية مباشرة
+    if (status === "COMPLETED") {
+      const order = updated[0];
+      const paymentNumber = `PAY-ORD-${order.orderNumber.replace("#", "")}-${Date.now().toString().slice(-4)}`;
+
+      // إضافة الحركة المالية في جدول الدفعات
+      try {
+        await prisma.$executeRaw`
+          INSERT INTO "Payment"
+          (
+            "id",
+            "amount",
+            "method",
+            "status",
+            "paidAt",
+            "receivedById",
+            "paymentNumber",
+            "bookingId"
+          )
+          VALUES
+          (
+            ${randomUUID()},
+            ${order.totalAmount},
+            'CASH'::"PaymentMethod",
+            'PAID'::"PaymentStatus",
+            CURRENT_TIMESTAMP,
+            ${user.id},
+            ${paymentNumber},
+            NULL
+          )
+        `;
+      } catch (payErr) {
+        console.error("Auto payment creation error for order:", payErr);
+      }
     }
 
     return NextResponse.json({
