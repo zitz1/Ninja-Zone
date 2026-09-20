@@ -118,6 +118,7 @@ export default function MenuPage() {
 
   const [success, setSuccess] = useState<{
     id: string;
+    orderNumber: string;
     total: number;
     status: string;
     locationType: string;
@@ -311,6 +312,7 @@ export default function MenuPage() {
 
       setSuccess({
         id: d.order.id,
+        orderNumber: d.order.orderNumber || `#${d.order.id.slice(-4).toUpperCase()}`,
         total: d.order.totalAmount,
         status: d.order.status,
         locationType:
@@ -541,7 +543,7 @@ export default function MenuPage() {
           </section>
 
 
-          {/* SUCCESS */}
+          {/* SUCCESS BOX */}
 
           {success && (
             <div className="nz-cart-overlay" style={{ zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -554,12 +556,10 @@ export default function MenuPage() {
                   تم إرسال طلبك بنجاح
                 </h2>
 
-                <p>
+                <p style={{ fontSize: "16px", marginTop: "10px" }}>
                   رقم الطلب:{" "}
-                  <b>
-                    {success.id
-                      .slice(-8)
-                      .toUpperCase()}
+                  <b style={{ color: "#a78bfa", fontSize: "20px", fontWeight: "900" }}>
+                    {success.orderNumber}
                   </b>
                 </p>
 
@@ -612,7 +612,6 @@ export default function MenuPage() {
             >
               <aside className="nz-cart" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden' }}>
 
-                {/* رأس السلة الثابت لمنع القص */}
                 <div className="nz-cart-head" style={{ padding: '20px 20px 10px', flexShrink: 0 }}>
                   <h2>
                     سلة الطلب
@@ -627,7 +626,6 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                {/* محتوى السلة القابل للتمرير */}
                 <div style={{ overflowY: 'auto', padding: '0 20px 100px', flex: 1 }}>
                   {cart.length === 0 ? (
                     <div className="nz-cart-empty">
@@ -742,7 +740,6 @@ export default function MenuPage() {
             >
               <aside className="nz-checkout" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
 
-                {/* رأس الدفع الثابت لمنع القص */}
                 <div className="nz-cart-head" style={{ padding: '20px 20px 10px', flexShrink: 0 }}>
                   <h2>
                     بيانات الطلب
@@ -757,7 +754,6 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                {/* محتوى بيانات الطلب القابل للتمرير */}
                 <div style={{ overflowY: 'auto', padding: '0 20px 100px', flex: 1 }}>
                   <p>
                     أدخل بياناتك ومكان جلوسك حتى
@@ -1018,447 +1014,214 @@ export default function MenuPage() {
         </main>
       </CustomerShell>
 
-
-      {/* ==================================================
-          LOCATION DESIGN
-          ================================================== */}
-
       <style jsx>{`
-
         .nz-location-box {
           margin-top: 18px;
           padding: 16px;
-
           border-radius: 18px;
-
-          background:
-            linear-gradient(
-              145deg,
-              rgba(30, 22, 55, .95),
-              rgba(12, 14, 28, .98)
-            );
-
-          border: 1px solid
-            rgba(139, 92, 246, .22);
-
-          box-shadow:
-            inset 0 1px 0
-              rgba(255,255,255,.025),
-            0 12px 35px
-              rgba(0,0,0,.25);
+          background: linear-gradient(145deg, rgba(30, 22, 55, .95), rgba(12, 14, 28, .98));
+          border: 1px solid rgba(139, 92, 246, .22);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 12px 35px rgba(0,0,0,.25);
         }
-
-
         .nz-location-heading {
           display: flex;
           flex-direction: column;
-
           gap: 4px;
-
           margin-bottom: 13px;
         }
-
-
         .nz-location-heading strong {
           color: #fff;
-
           font-size: 15px;
           font-weight: 800;
         }
-
-
         .nz-location-heading span {
           color: #8587a3;
-
           font-size: 11px;
         }
-
-
         .nz-location-types {
           display: grid;
-
-          grid-template-columns:
-            repeat(2, minmax(0, 1fr));
-
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 9px;
         }
-
-
         .nz-location-types button {
           appearance: none;
           -webkit-appearance: none;
-
           width: 100%;
           min-height: 82px;
-
           padding: 10px 7px;
-
           display: flex;
           flex-direction: column;
-
           align-items: center;
           justify-content: center;
-
           gap: 5px;
-
           border-radius: 14px;
-
-          border: 1px solid
-            rgba(255,255,255,.07);
-
-          background:
-            linear-gradient(
-              145deg,
-              rgba(31,33,54,.96),
-              rgba(18,20,36,.98)
-            );
-
+          border: 1px solid rgba(255,255,255,.07);
+          background: linear-gradient(145deg, rgba(31,33,54,.96), rgba(18,20,36,.98));
           color: #fff;
-
           cursor: pointer;
-
-          transition:
-            transform .18s ease,
-            border-color .18s ease,
-            background .18s ease,
-            box-shadow .18s ease;
+          transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
         }
-
-
         .nz-location-types button:hover {
           transform: translateY(-2px);
-
-          border-color:
-            rgba(139,92,246,.55);
-
-          background:
-            linear-gradient(
-              145deg,
-              rgba(45,35,78,.98),
-              rgba(20,22,42,1)
-            );
-
-          box-shadow:
-            0 8px 22px
-              rgba(124,58,237,.12);
+          border-color: rgba(139,92,246,.55);
+          background: linear-gradient(145deg, rgba(45,35,78,.98), rgba(20,22,42,1));
+          box-shadow: 0 8px 22px rgba(124,58,237,.12);
         }
-
-
         .nz-location-types button.active {
-          border-color:
-            rgba(139,92,246,.95);
-
-          background:
-            linear-gradient(
-              145deg,
-              rgba(91,55,170,.52),
-              rgba(37,28,76,.95)
-            );
-
-          box-shadow:
-            0 0 0 1px
-              rgba(139,92,246,.18),
-            0 0 24px
-              rgba(124,58,237,.22),
-            inset 0 0 25px
-              rgba(124,58,237,.08);
+          border-color: rgba(139,92,246,.95);
+          background: linear-gradient(145deg, rgba(91,55,170,.52), rgba(37,28,76,.95));
+          box-shadow: 0 0 0 1px rgba(139,92,246,.18), 0 0 24px rgba(124,58,237,.22), inset 0 0 25px rgba(124,58,237,.08);
         }
-
-
         .nz-location-types button > span {
           font-size: 23px;
-
           line-height: 1;
-
-          filter:
-            drop-shadow(
-              0 0 5px
-              rgba(139,92,246,.15)
-            );
+          filter: drop-shadow(0 0 5px rgba(139,92,246,.15));
         }
-
-
         .nz-location-types button strong {
           color: #f5f3ff;
-
           font-size: 13px;
           font-weight: 800;
         }
-
-
         .nz-location-types button.active strong {
           color: #c4b5fd;
         }
-
-
         .nz-location-types button small {
           color: #777b98;
-
           font-size: 9px;
-
           text-align: center;
-
           line-height: 1.3;
         }
-
-
         .nz-location-options {
           margin-top: 15px;
-
           padding-top: 14px;
-
-          border-top: 1px solid
-            rgba(255,255,255,.06);
+          border-top: 1px solid rgba(255,255,255,.06);
         }
-
-
         .nz-location-options-title {
           display: flex;
-
           align-items: center;
           justify-content: space-between;
-
           gap: 10px;
-
           margin-bottom: 10px;
         }
-
-
         .nz-location-options-title strong {
           color: #fff;
-
           font-size: 13px;
           font-weight: 800;
         }
-
-
         .nz-location-options-title span {
           padding: 4px 9px;
-
           border-radius: 999px;
-
-          background:
-            rgba(139,92,246,.12);
-
-          border: 1px solid
-            rgba(139,92,246,.2);
-
+          background: rgba(139,92,246,.12);
+          border: 1px solid rgba(139,92,246,.2);
           color: #a78bfa;
-
           font-size: 10px;
           font-weight: 800;
         }
-
-
         .nz-location-grid {
           display: grid;
-
-          grid-template-columns:
-            repeat(2, minmax(0, 1fr));
-
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 7px;
-
           max-height: 220px;
-
           overflow-y: auto;
-
           padding-right: 2px;
         }
-
-
         .nz-location-grid::-webkit-scrollbar {
           width: 4px;
         }
-
-
         .nz-location-grid::-webkit-scrollbar-track {
           background: transparent;
         }
-
-
         .nz-location-grid::-webkit-scrollbar-thumb {
-          background:
-            rgba(139,92,246,.35);
-
+          background: rgba(139,92,246,.35);
           border-radius: 999px;
         }
-
-
         .nz-location-grid button {
           appearance: none;
           -webkit-appearance: none;
-
           width: 100%;
-
           min-height: 42px;
-
           padding: 7px 8px;
-
           border-radius: 10px;
-
-          border: 1px solid
-            rgba(255,255,255,.07);
-
-          background:
-            rgba(255,255,255,.035);
-
+          border: 1px solid rgba(255,255,255,.07);
+          background: rgba(255,255,255,.035);
           color: #b9bbce;
-
           font-size: 11px;
           font-weight: 700;
-
           cursor: pointer;
-
-          transition:
-            background .18s ease,
-            border-color .18s ease,
-            color .18s ease,
-            transform .18s ease,
-            box-shadow .18s ease;
+          transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
         }
-
-
         .nz-location-grid button:hover {
           transform: translateY(-1px);
-
-          border-color:
-            rgba(139,92,246,.5);
-
-          background:
-            rgba(139,92,246,.1);
-
+          border-color: rgba(139,92,246,.5);
+          background: rgba(139,92,246,.1);
           color: #ddd6fe;
         }
-
-
         .nz-location-grid button.active {
           border-color: #8b5cf6;
-
-          background:
-            linear-gradient(
-              135deg,
-              rgba(124,58,237,.72),
-              rgba(59,130,246,.5)
-            );
-
+          background: linear-gradient(135deg, rgba(124,58,237,.72), rgba(59,130,246,.5));
           color: #fff;
-
-          box-shadow:
-            0 0 16px
-              rgba(124,58,237,.22);
+          box-shadow: 0 0 16px rgba(124,58,237,.22);
         }
-
-
         .nz-selected-location {
           display: flex;
-
           align-items: center;
-
           gap: 10px;
-
           margin-top: 12px;
-
           padding: 10px 12px;
-
           border-radius: 12px;
-
-          background:
-            linear-gradient(
-              135deg,
-              rgba(34,197,94,.08),
-              rgba(16,185,129,.035)
-            );
-
-          border: 1px solid
-            rgba(34,197,94,.2);
+          background: linear-gradient(135deg, rgba(34,197,94,.08), rgba(16,185,129,.035));
+          border: 1px solid rgba(34,197,94,.2);
         }
-
-
         .nz-selected-location > span {
           width: 27px;
           height: 27px;
-
           flex: 0 0 27px;
-
           display: flex;
-
           align-items: center;
           justify-content: center;
-
           border-radius: 50%;
-
-          background:
-            rgba(34,197,94,.13);
-
+          background: rgba(34,197,94,.13);
           color: #4ade80;
-
           font-size: 13px;
           font-weight: 900;
         }
-
-
         .nz-selected-location div {
           display: flex;
-
           flex-direction: column;
-
           gap: 2px;
         }
-
-
         .nz-selected-location small {
           color: #7f849c;
-
           font-size: 9px;
         }
-
-
         .nz-selected-location strong {
           color: #86efac;
-
           font-size: 12px;
         }
-
-
         @media (min-width: 700px) {
-
           .nz-location-types {
-            grid-template-columns:
-              repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
           }
-
           .nz-location-grid {
-            grid-template-columns:
-              repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
-
         }
-
-
         @media (max-width: 520px) {
-
           .nz-location-box {
             padding: 13px;
-
             border-radius: 16px;
           }
-
           .nz-location-types {
             gap: 7px;
           }
-
           .nz-location-types button {
             min-height: 76px;
-
             border-radius: 12px;
           }
-
           .nz-location-types button > span {
             font-size: 21px;
           }
-
         }
-
       `}</style>
     </>
   );

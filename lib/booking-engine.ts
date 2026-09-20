@@ -506,46 +506,29 @@ async function allocateResources(
 }
 
 /* =========================================================
-   BOOKING NUMBER
+   BOOKING NUMBER (DAILY SEQUENTIAL)
 ========================================================= */
 
 async function generateBookingNumber(
   tx: Prisma.TransactionClient,
 ) {
-  const sequence =
-    await tx.$queryRaw<
-      Array<{ value: bigint }>
-    >`
-      SELECT nextval(
-        'ninja_zone_booking_number_seq'
-      ) AS value
-    `;
+  // حساب بداية اليوم الحالي بتوقيت العراق
+  const now = new Date();
+  const startOfToday = new Date(now.getTime() + 3 * 60 * 60_000);
+  startOfToday.setUTCHours(0, 0, 0, 0);
+  const startOfTodayUtc = new Date(startOfToday.getTime() - 3 * 60 * 60_000);
 
-  if (!sequence[0]?.value) {
-    throw new BookingValidationError(
-      "تعذر إنشاء رقم الحجز.",
-    );
-  }
-
-  const number = String(
-    sequence[0].value,
-  ).padStart(4, "0");
-
-  const dateKey =
-    new Intl.DateTimeFormat(
-      "en-CA",
-      {
-        timeZone:
-          "Asia/Baghdad",
-        year: "2-digit",
-        month: "2-digit",
-        day: "2-digit",
+  // حساب عدد حجوزات اليوم الحالي فقط ليبدأ كل يوم من #1
+  const todayCount = await tx.booking.count({
+    where: {
+      createdAt: {
+        gte: startOfTodayUtc,
       },
-    )
-      .format(new Date())
-      .replaceAll("-", "");
+    },
+  });
 
-  return `NZ-B-${dateKey}-${number}`;
+  const dailySequence = todayCount + 1;
+  return `#${dailySequence}`;
 }
 
 /* =========================================================
@@ -587,6 +570,7 @@ export async function createPendingBooking(
               select: {
                 id: true,
                 isActive: true,
+                name: true,
               },
             });
 
