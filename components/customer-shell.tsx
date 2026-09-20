@@ -21,7 +21,6 @@ const nav = [
   { href: "/account", label: "حسابي", icon: "♙" },
 ];
 
-// دالة إصدار رنين قوي للكاشير (جرس ثنائي ناعم وواضح)
 function triggerBeep() {
   try {
     const AudioCtx =
@@ -48,7 +47,7 @@ function triggerBeep() {
     playTone(659.25, now, 0.2); // E5
     playTone(880, now + 0.15, 0.35); // A5
   } catch {
-    // تجاهل القيود
+    //
   }
 }
 
@@ -61,29 +60,24 @@ export function CustomerShell({
   const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
-  // حالة مراقبة الطلبات الجديدة والتنبيه الصوتي
-  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [soundUnlocked, setSoundUnlocked] = useState(false);
-  const prevCountRef = useRef<number | null>(null);
+  const prevTotalRef = useRef<number | null>(null);
 
   const active = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  // تحميل بيانات المستخدم الحالية
   useEffect(() => {
     let mounted = true;
 
     async function loadUser() {
       try {
-        const response = await fetch("/api/auth/me", {
-          cache: "no-store",
-        });
-
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
         if (!response.ok) {
           if (mounted) setUser(null);
           return;
         }
-
         const data = await response.json();
         if (mounted) setUser(data.user ?? null);
       } catch {
@@ -94,38 +88,53 @@ export function CustomerShell({
     }
 
     loadUser();
-
     return () => {
       mounted = false;
     };
   }, [pathname]);
 
-  // فحص الطلبات الجديدة كل 4 ثوانٍ (إذا كان المستخدم كاشير أو أدمن)
+  // فحص الطلبات والحجوزات المعلقة معاً كل 4 ثوانٍ للكاشير والمدير
   useEffect(() => {
     let mounted = true;
 
-    async function checkPendingOrders() {
+    async function checkPendingAll() {
       if (!user || (user.role !== "CASHIER" && user.role !== "ADMIN")) {
         return;
       }
 
       try {
-        const res = await fetch(`/api/menu/orders?t=${Date.now()}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (mounted && Array.isArray(data.orders)) {
-          const count = data.orders.filter(
-            (o: { status: string }) => o.status === "PENDING"
-          ).length;
+        const [ordersRes, bookingsRes] = await Promise.all([
+          fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
+          fetch(`/api/cashier/bookings?t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
+        ]);
 
-          // إذا زاد عدد الطلبات الجديدة، نطلق الصوت
-          if (prevCountRef.current !== null && count > prevCountRef.current) {
-            triggerBeep();
+        let ordersCount = 0;
+        let bookingsCount = 0;
+
+        if (ordersRes && ordersRes.ok) {
+          const oData = await ordersRes.json();
+          if (Array.isArray(oData.orders)) {
+            ordersCount = oData.orders.filter((o: { status: string }) => o.status === "PENDING").length;
           }
-          prevCountRef.current = count;
-          setPendingCount(count);
+        }
+
+        if (bookingsRes && bookingsRes.ok) {
+          const bData = await bookingsRes.json();
+          if (Array.isArray(bData.bookings)) {
+            bookingsCount = bData.bookings.filter((b: { status: string }) => b.status === "PENDING").length;
+          }
+        }
+
+        const totalPending = ordersCount + bookingsCount;
+
+        if (prevTotalRef.current !== null && totalPending > prevTotalRef.current) {
+          triggerBeep();
+        }
+        prevTotalRef.current = totalPending;
+
+        if (mounted) {
+          setPendingOrdersCount(ordersCount);
+          setPendingBookingsCount(bookingsCount);
         }
       } catch {
         //
@@ -133,8 +142,8 @@ export function CustomerShell({
     }
 
     if (user && (user.role === "CASHIER" || user.role === "ADMIN")) {
-      checkPendingOrders();
-      const interval = setInterval(checkPendingOrders, 4000);
+      checkPendingAll();
+      const interval = setInterval(checkPendingAll, 4000);
       return () => {
         mounted = false;
         clearInterval(interval);
@@ -142,10 +151,9 @@ export function CustomerShell({
     }
   }, [user]);
 
-  // تفعيل إذن الصوت بنقرة واحدة
   function enableSound() {
     setSoundUnlocked(true);
-    triggerBeep(); // تجربة الصوت فوراً للتأكيد
+    triggerBeep();
   }
 
   async function logout() {
@@ -158,6 +166,7 @@ export function CustomerShell({
   }
 
   const isStaff = user?.role === "CASHIER" || user?.role === "ADMIN";
+  const totalPending = pendingOrdersCount + pendingBookingsCount;
 
   return (
     <div className="nz-app" dir="rtl">
@@ -246,16 +255,19 @@ export function CustomerShell({
 
       {/* MAIN */}
       <div className="nz-main">
-        {/* شريط الإشعار البارز في الواجهة الرئيسية للكاشير والإدارة */}
-        {isStaff && pendingCount > 0 && (
+        {/* شريط الإشعار البارز والشامل للطلبات والحجوزات */}
+        {isStaff && totalPending > 0 && (
           <div className="nz-staff-alert-banner">
             <div className="nz-alert-content">
               <span className="nz-alert-bell">🔔</span>
               <div>
                 <strong>
-                  تنبيه الكاشير: يوجد {pendingCount} طلبات جديدة بانتظار التحضير!
+                  تنبيه الكاشير: يوجد {totalPending} طلبات وحجوزات جديدة بانتظار التأكيد!
                 </strong>
-                <p>اضغط للذهاب لصفحة الطلبات وبدء العمل عليها فوراً.</p>
+                <p>
+                  {pendingOrdersCount > 0 && `(${pendingOrdersCount} طلب منيو) `}
+                  {pendingBookingsCount > 0 && `(${pendingBookingsCount} حجز جهاز جديد)`}
+                </p>
               </div>
             </div>
 
@@ -265,15 +277,23 @@ export function CustomerShell({
                   type="button"
                   onClick={enableSound}
                   className="nz-sound-btn"
-                  title="اضغط هنا لتفعيل رنين التنبيه التلقائي"
+                  title="تفعيل رنين التنبيه التلقائي"
                 >
                   🔊 تفعيل الرنين
                 </button>
               )}
 
-              <Link href="/cashier/orders" className="nz-goto-orders-btn">
-                معاينة الطلبات ←
-              </Link>
+              {pendingBookingsCount > 0 && (
+                <Link href="/cashier/bookings" className="nz-goto-btn nz-goto-book">
+                  الحجوزات ({pendingBookingsCount}) ←
+                </Link>
+              )}
+
+              {pendingOrdersCount > 0 && (
+                <Link href="/cashier/orders" className="nz-goto-btn nz-goto-orders">
+                  المنيو ({pendingOrdersCount}) ←
+                </Link>
+              )}
             </div>
           </div>
         )}
@@ -444,11 +464,12 @@ export function CustomerShell({
           align-items: center;
           gap: 8px;
           flex-shrink: 0;
+          flex-wrap: wrap;
         }
 
         .nz-sound-btn {
           appearance: none;
-          padding: 6px 12px;
+          padding: 7px 12px;
           border-radius: 8px;
           border: 1px solid rgba(255, 255, 255, 0.2);
           background: rgba(255, 255, 255, 0.08);
@@ -463,26 +484,35 @@ export function CustomerShell({
           background: rgba(255, 255, 255, 0.16);
         }
 
-        .nz-goto-orders-btn {
-          padding: 7px 16px;
+        .nz-goto-btn {
+          padding: 7px 14px;
           border-radius: 8px;
-          background: #ef4444;
-          color: #fff;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 800;
           text-decoration: none;
-          transition: background 0.2s ease, transform 0.2s ease;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          transition: 0.2s ease;
         }
 
-        .nz-goto-orders-btn:hover {
+        .nz-goto-book {
+          background: #8b5cf6;
+          color: #fff;
+        }
+        .nz-goto-book:hover {
+          background: #7c3aed;
+        }
+
+        .nz-goto-orders {
+          background: #ef4444;
+          color: #fff;
+        }
+        .nz-goto-orders:hover {
           background: #dc2626;
-          transform: translateY(-1px);
         }
 
-        @media (max-width: 650px) {
+        @media (max-width: 700px) {
           .nz-staff-alert-banner {
             flex-direction: column;
             align-items: flex-start;
@@ -496,7 +526,7 @@ export function CustomerShell({
             justify-content: flex-end;
           }
 
-          .nz-goto-orders-btn {
+          .nz-goto-btn {
             flex: 1;
             text-align: center;
           }
