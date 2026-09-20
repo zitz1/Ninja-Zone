@@ -453,7 +453,7 @@ export async function POST(request: Request) {
 }
 
 /* =========================================================
-   PATCH — Cashier/Admin only (مع احتساب الإيرادات تلقائياً)
+   PATCH — Cashier/Admin only (تحديث الحالة والتسليم بنجاح)
    ========================================================= */
 export async function PATCH(
   request: Request,
@@ -543,42 +543,6 @@ export async function PATCH(
         },
         { status: 404 },
       );
-    }
-
-    // إذا تحولت الحالة إلى "COMPLETED - تم التسليم"، يتم احتسابها كإيرادات نقدية مباشرة
-    if (status === "COMPLETED") {
-      const order = updated[0];
-      const paymentNumber = `PAY-ORD-${order.orderNumber.replace("#", "")}-${Date.now().toString().slice(-4)}`;
-
-      // إضافة الحركة المالية في جدول الدفعات
-      try {
-        await prisma.$executeRaw`
-          INSERT INTO "Payment"
-          (
-            "id",
-            "amount",
-            "method",
-            "status",
-            "paidAt",
-            "receivedById",
-            "paymentNumber",
-            "bookingId"
-          )
-          VALUES
-          (
-            ${randomUUID()},
-            ${order.totalAmount},
-            'CASH'::"PaymentMethod",
-            'PAID'::"PaymentStatus",
-            CURRENT_TIMESTAMP,
-            ${user.id},
-            ${paymentNumber},
-            NULL
-          )
-        `;
-      } catch (payErr) {
-        console.error("Auto payment creation error for order:", payErr);
-      }
     }
 
     return NextResponse.json({

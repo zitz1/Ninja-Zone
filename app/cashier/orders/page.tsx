@@ -68,8 +68,8 @@ const STATUS = {
   CANCELLED: {
     label: "ملغي",
     color: "#8d95a5",
-    bg: "rgba(141,149,165,.10)",
-    border: "rgba(141,149,165,.22)",
+    bg: "rgba(141,149,155,.10)",
+    border: "rgba(141,149,155,.22)",
   },
 } satisfies Record<
   OrderStatus,
@@ -127,6 +127,35 @@ function getLocation(order: Order) {
     .join(" — ");
 }
 
+// 🔔 دالة رنين قوية ومضمونة للكاشير (جرس ناعم ثلاثي)
+function playCashierChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const playTone = (freq: number, start: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.3, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+
+    playTone(659.25, now, 0.2); // E5
+    playTone(880, now + 0.15, 0.2); // A5
+    playTone(1318.51, now + 0.3, 0.4); // E6
+  } catch {
+    // تجاهل القيود
+  }
+}
+
 export default function CashierOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -140,10 +169,8 @@ export default function CashierOrdersPage() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  // 🔔 إعدادات التنبيه الصوتي
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const prevPendingRef = useRef<string[]>([]);
-  const isFirstLoad = useRef(true);
+  const prevPendingCount = useRef<number | null>(null);
 
   async function loadOrders(manual = false) {
     if (manual) {
@@ -151,7 +178,7 @@ export default function CashierOrdersPage() {
     }
 
     try {
-      const response = await fetch("/api/menu/orders", {
+      const response = await fetch("/api/menu/orders?t=" + Date.now(), {
         cache: "no-store",
       });
 
@@ -163,9 +190,16 @@ export default function CashierOrdersPage() {
         );
       }
 
-      setOrders(
-        Array.isArray(data.orders) ? data.orders : [],
-      );
+      const list: Order[] = Array.isArray(data.orders) ? data.orders : [];
+      const currentPendingCount = list.filter((o) => o.status === "PENDING").length;
+
+      // 🔔 إذا زاد عدد الطلبات الجديدة، نطلق الرنين فوراً
+      if (prevPendingCount.current !== null && currentPendingCount > prevPendingCount.current && soundEnabled) {
+        playCashierChime();
+      }
+      prevPendingCount.current = currentPendingCount;
+
+      setOrders(list);
       setError("");
     } catch (err) {
       setError(
@@ -179,54 +213,16 @@ export default function CashierOrdersPage() {
     }
   }
 
-  // تأثير جلب البيانات المستمر
   useEffect(() => {
     loadOrders();
-
     const interval = window.setInterval(() => {
       loadOrders();
-    }, 5000);
+    }, 4000);
 
     return () => {
       window.clearInterval(interval);
     };
-  }, []);
-
-  // 🔔 تأثير مخصص لمراقبة الطلبات الجديدة وتشغيل الصوت
-  useEffect(() => {
-    // نجيب فقط أرقام (ID) الطلبات الجديدة اللي بحالة PENDING
-    const currentPendingIds = orders
-      .filter((o) => o.status === "PENDING")
-      .map((o) => o.id);
-
-    // إذا كانت هذه أول مرة تفتح بيها الصفحة، نحفظ الطلبات بدون تشغيل الصوت
-    if (isFirstLoad.current) {
-      if (!loading) {
-        isFirstLoad.current = false;
-        prevPendingRef.current = currentPendingIds;
-      }
-      return;
-    }
-
-    // نفحص إذا اكو ID جديد ما كان موجود بالمرة السابقة
-    const hasNewOrders = currentPendingIds.some(
-      (id) => !prevPendingRef.current.includes(id)
-    );
-
-    if (hasNewOrders && soundEnabled) {
-      try {
-        const audio = new Audio("/notification.mp3");
-        audio.play().catch((err) => {
-          console.warn("المتصفح منع الصوت تلقائياً، يحتاج تفاعل:", err);
-        });
-      } catch (e) {
-        // التجاهل في حال حدوث خطأ
-      }
-    }
-
-    // تحديث المرجع للمرة القادمة
-    prevPendingRef.current = currentPendingIds;
-  }, [orders, loading, soundEnabled]);
+  }, [soundEnabled]);
 
   async function changeStatus(
     orderId: string,
@@ -383,15 +379,22 @@ export default function CashierOrdersPage() {
             </div>
 
             <div style={{ display: "flex", gap: "10px" }}>
-              {/* 🔔 زر تفعيل الصوت */}
               <button
                 type="button"
                 className="refreshButton"
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                title="تفعيل التنبيه الصوتي للطلبات الجديدة"
-                style={{ minWidth: "50px", padding: "0" }}
+                onClick={() => {
+                  setSoundEnabled(!soundEnabled);
+                  playCashierChime();
+                }}
+                title="تفعيل أو كتم صوت التنبيه التلقائي"
+                style={{
+                  minWidth: "50px",
+                  padding: "0 12px",
+                  background: soundEnabled ? "rgba(139, 92, 246, 0.2)" : "#14161c",
+                  borderColor: soundEnabled ? "#8b5cf6" : "#292d36",
+                }}
               >
-                {soundEnabled ? "🔔" : "🔕"}
+                {soundEnabled ? "🔔 تنبيهات مفعّلة" : "🔕 مكتوم"}
               </button>
 
               <button
@@ -546,7 +549,7 @@ export default function CashierOrdersPage() {
 
             <div className="liveStatus">
               <i />
-              تحديث تلقائي
+              تحديث وتنبيه تلقائي مباشر
             </div>
           </section>
 
@@ -899,13 +902,13 @@ export default function CashierOrdersPage() {
                         >
                           {updating === order.id
                             ? "جاري التحديث..."
-                            : "تم التسليم"}
+                            : "تم التسليم واستلام المبلغ"}
                         </button>
                       )}
 
                       {order.status === "COMPLETED" && (
                         <div className="completed">
-                          ✓ تم تسليم الطلب
+                          ✓ تم تسليم الطلب واستلام الحساب
                         </div>
                       )}
 
@@ -981,8 +984,6 @@ export default function CashierOrdersPage() {
           margin: 0 auto;
         }
 
-        /* HEADER */
-
         .header {
           display: flex;
           justify-content: space-between;
@@ -1037,8 +1038,6 @@ export default function CashierOrdersPage() {
           border-color: #3a3e49;
           transform: translateY(-1px);
         }
-
-        /* TOOLBAR */
 
         .toolbar {
           display: flex;
@@ -1123,8 +1122,6 @@ export default function CashierOrdersPage() {
           display: inline-block;
           animation: spin 0.8s linear infinite;
         }
-
-        /* FILTERS */
 
         .filters {
           display: grid;
@@ -1217,8 +1214,6 @@ export default function CashierOrdersPage() {
           font-weight: 950;
         }
 
-        /* SECTION */
-
         .sectionBar {
           min-height: 65px;
           display: flex;
@@ -1262,8 +1257,6 @@ export default function CashierOrdersPage() {
           box-shadow: 0 0 0 4px rgba(49, 212, 139, 0.08);
         }
 
-        /* ERROR */
-
         .errorBox {
           display: flex;
           gap: 10px;
@@ -1298,8 +1291,6 @@ export default function CashierOrdersPage() {
           color: #af7d86;
           font-size: 10px;
         }
-
-        /* ORDERS */
 
         .orders {
           display: grid;
@@ -1350,11 +1341,6 @@ export default function CashierOrdersPage() {
 
         .orderToggle:hover {
           background: rgba(255, 255, 255, 0.018);
-        }
-
-        .orderToggle:focus-visible {
-          outline: 2px solid rgba(212, 175, 55, 0.72);
-          outline-offset: -2px;
         }
 
         .orderHeaderSummary {
@@ -1567,8 +1553,6 @@ export default function CashierOrdersPage() {
           font-size: 9px;
         }
 
-        /* ITEMS */
-
         .itemsSection {
           padding: 0 19px;
         }
@@ -1663,8 +1647,6 @@ export default function CashierOrdersPage() {
           background: #15181e;
         }
 
-        /* NOTE */
-
         .note {
           margin: 13px 19px 0;
           padding: 10px 12px;
@@ -1685,8 +1667,6 @@ export default function CashierOrdersPage() {
           font-size: 10px;
           line-height: 1.7;
         }
-
-        /* TOTAL */
 
         .totalRow {
           margin: 14px 19px 0;
@@ -1718,8 +1698,6 @@ export default function CashierOrdersPage() {
           font-weight: 950;
           letter-spacing: -0.02em;
         }
-
-        /* ACTIONS */
 
         .actions {
           display: flex;
@@ -1798,8 +1776,6 @@ export default function CashierOrdersPage() {
           color: #929aa8;
         }
 
-        /* BOTTOM */
-
         .bottomBack {
           display: flex;
           justify-content: center;
@@ -1813,8 +1789,6 @@ export default function CashierOrdersPage() {
         .bottomBack:hover {
           color: #858e9c;
         }
-
-        /* STATES */
 
         .loading,
         .empty {
@@ -1874,8 +1848,6 @@ export default function CashierOrdersPage() {
           }
         }
 
-        /* TABLET */
-
         @media (max-width: 800px) {
           .filters {
             grid-template-columns: repeat(2, 1fr);
@@ -1890,8 +1862,6 @@ export default function CashierOrdersPage() {
             width: 100%;
           }
         }
-
-        /* MOBILE */
 
         @media (max-width: 600px) {
           .cashierPage {
@@ -1980,24 +1950,6 @@ export default function CashierOrdersPage() {
             flex: none;
           }
         }
-
-        @media (max-width: 390px) {
-          .filterLabel {
-            font-size: 10px;
-          }
-
-          .filterCard strong {
-            font-size: 22px;
-          }
-
-          .orderNumber {
-            font-size: 13px;
-          }
-
-          .totalRow strong {
-            font-size: 17px;
-          }
-        }
       `}</style>
     </>
   );
@@ -2011,7 +1963,7 @@ function Loading() {
       <strong>جاري تحميل الطلبات</strong>
 
       <span>
-        يتم تحديث الطلبات تلقائيًا كل 5 ثوانٍ.
+        يتم فحص الطلبات وتحديثها تلقائيًا مع التنبيه الصوتي.
       </span>
     </div>
   );
@@ -2047,7 +1999,7 @@ function Empty({
       <p>
         {hasSearch
           ? "جرّب تغيير كلمة البحث أو اختيار فلتر آخر."
-          : "أي طلب جديد راح يظهر هنا تلقائيًا."}
+          : "أي طلب جديد راح يظهر هنا تلقائيًا مع تنبيه صوتي."}
       </p>
     </div>
   );

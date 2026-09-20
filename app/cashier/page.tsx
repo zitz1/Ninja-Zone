@@ -1,8 +1,59 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+
+function playDashboardAlert() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(587.33, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.45);
+  } catch {
+    //
+  }
+}
 
 export default function CashierDashboard() {
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const prevCount = useRef<number | null>(null);
+
+  useEffect(() => {
+    async function checkLiveOrders() {
+      try {
+        const res = await fetch("/api/menu/orders?t=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.orders)) {
+          const count = data.orders.filter((o: { status: string }) => o.status === "PENDING").length;
+          if (prevCount.current !== null && count > prevCount.current) {
+            playDashboardAlert();
+          }
+          prevCount.current = count;
+          setPendingOrdersCount(count);
+        }
+      } catch {
+        //
+      }
+    }
+
+    checkLiveOrders();
+    const timer = setInterval(checkLiveOrders, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <main className="page" dir="rtl">
       {/* الشريط العلوي البسيط */}
@@ -20,18 +71,32 @@ export default function CashierDashboard() {
         </Link>
       </div>
 
+      {/* تنبيه بارز في حال وجود طلبات معلقة */}
+      {pendingOrdersCount > 0 && (
+        <div className="alertNotice">
+          <span className="alertBell">🔔</span>
+          <div>
+            <strong>يوجد {pendingOrdersCount} طلبات جديدة بانتظار التأكيد!</strong>
+            <p>اضغط على كارت الطلبات والتسليم للبدء بالتحضير فوراً.</p>
+          </div>
+          <Link href="/cashier/orders" className="alertAction">
+            معاينة الطلبات ←
+          </Link>
+        </div>
+      )}
+
       {/* الهيرو الاحترافي الجديد (Dashboard Header) */}
       <section className="dashboardHeader">
         <div className="headerMain">
           <div className="statusBadge">
             <span className="pulse"></span>
-            نظام الكاشير متصل
+            نظام الكاشير متصل وجاهز للاستقبال
           </div>
           <h2>
-            أهلاً بك، <span>جاهز لاستقبال الطلبات؟</span>
+            أهلاً بك، <span>جاهز لمتابعة المركز؟</span>
           </h2>
           <p>
-            هذه المساحة مخصصة لك لإدارة حركة الجلسات، تنفيذ طلبات المنيو، ومتابعة المدفوعات بدقة وسرعة.
+            هذه المساحة مخصصة لك لإدارة حركة الجلسات، تنفيذ طلبات المنيو، وتنبيهك تلقائياً عند ورود أي حجز أو طلب.
           </p>
         </div>
 
@@ -47,8 +112,10 @@ export default function CashierDashboard() {
           <div className="statItem">
             <span className="statIcon">◎</span>
             <div className="statInfo">
-              <span className="statValue">حالة المركز</span>
-              <span className="statDesc">مفتوح الآن</span>
+              <span className="statValue">الطلبات المعلقة</span>
+              <span className="statDesc" style={{ color: pendingOrdersCount > 0 ? "#ff4d67" : "#34d399", fontWeight: 700 }}>
+                {pendingOrdersCount > 0 ? `${pendingOrdersCount} طلب جديد` : "لا توجد طلبات معلقة"}
+              </span>
             </div>
           </div>
         </div>
@@ -65,6 +132,9 @@ export default function CashierDashboard() {
           <Link href="/cashier/orders" className="mainCard">
             <div className="cardHeader">
               <div className="cardIcon ordersIcon">▣</div>
+              {pendingOrdersCount > 0 && (
+                <span className="badgeCount">{pendingOrdersCount} جديد</span>
+              )}
               <span className="cardArrow">←</span>
             </div>
             <div className="cardBody">
@@ -123,13 +193,12 @@ const styles = `
     align-items: center;
   }
 
-  /* الشريط العلوي */
   .top {
     width: min(1050px, 100%);
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
   }
 
   .eyebrow {
@@ -170,7 +239,59 @@ const styles = `
     border-color: #334155;
   }
 
-  /* الهيرو الاحترافي (Dashboard Header) */
+  /* تنبيه الطلبات المعلقة */
+  .alertNotice {
+    width: min(1050px, 100%);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(185, 28, 28, 0.08));
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.1);
+  }
+
+  .alertBell {
+    font-size: 24px;
+    animation: bounce 1s infinite alternate;
+  }
+
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-4px); }
+  }
+
+  .alertNotice strong {
+    display: block;
+    color: #fca5a5;
+    font-size: 14px;
+  }
+
+  .alertNotice p {
+    margin: 3px 0 0;
+    color: #cbd5e1;
+    font-size: 12px;
+  }
+
+  .alertAction {
+    margin-inline-start: auto;
+    padding: 8px 16px;
+    background: #ef4444;
+    color: #fff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: background 0.2s ease;
+  }
+
+  .alertAction:hover {
+    background: #dc2626;
+  }
+
   .dashboardHeader {
     width: min(1050px, 100%);
     background: #0a0b10;
@@ -288,7 +409,6 @@ const styles = `
     background: #1c1f2e;
   }
 
-  /* الكروت */
   .section {
     width: min(1050px, 100%);
   }
@@ -315,6 +435,7 @@ const styles = `
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   .mainCard:hover {
@@ -327,8 +448,17 @@ const styles = `
   .cardHeader {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     margin-bottom: 24px;
+  }
+
+  .badgeCount {
+    background: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 999px;
   }
 
   .cardIcon {
@@ -392,7 +522,6 @@ const styles = `
     color: #e2e8f0;
   }
 
-  /* ريسبونسف (شاشات الموبايل) */
   @media (max-width: 950px) {
     .dashboardHeader {
       flex-direction: column;
