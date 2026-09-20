@@ -1,208 +1,595 @@
-import "dotenv/config";
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import {
-  PrismaClient,
-  ResourceStatus,
-  ResourceType,
-  UserRole,
-} from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
+import { getSession } from "@/lib/auth";
 
-const connectionString = process.env.DATABASE_URL;
+export const dynamic = "force-dynamic";
 
-if (!connectionString) {
-  throw new Error("DATABASE_URL is not defined");
+const allowedLocationTypes = [
+  "جهاز",
+  "طاولة",
+  "سينما",
+  "بليارد",
+] as const;
+
+const allowedStatuses = [
+  "PENDING",
+  "PREPARING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
+
+function cleanText(value: unknown, max: number) {
+  return typeof value === "string"
+    ? value.trim().slice(0, max)
+    : "";
 }
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString }),
-});
-
-const services = [
-  [ResourceType.PC_NORMAL, "PC-N", "PC Normal", 8, 2500, "PC عادي", "جلسات مريحة وسريعة وممتعة", "/reference-cards/pc-normal.jpg", 3],
-  [ResourceType.PC_MASTER, "PC-M", "PC Master", 8, 4000, "PC ماستر", "أعلى مواصفات لأفضل أداء", "/reference-cards/pc-master.jpg", 2],
-  [ResourceType.PS5, "PS5-", "PlayStation 5", 10, 5000, "PlayStation 5", "تجربة لعب حصرية على بلايستيشن 5", "/reference-cards/ps5.jpg", 1],
-  [ResourceType.CINEMA, "CIN-", "Cinema", 4, 12000, "غرف السينما", "شاشة كبيرة وصوت محيطي لتجربة سينمائية", "/reference-cards/cinema.jpg", 4],
-  [ResourceType.BILLIARD, "BIL-", "Billiard", 2, 1000, "بليارد", "طاولات بليارد احترافية وأجواء ممتعة", "/reference-cards/billiard.jpg", 5],
-  [ResourceType.TABLE, "TAB-", "Tables", 8, 5000, "الطاولات", "مساحة مريحة للألعاب والطعام والاسترخاء", "/reference-cards/tables.jpg", 6],
-] as const;
-
-const menu = [
-  ["مشروبات", "بيبسي", "مشروب غازي بارد", 1000, "🥤"],
-  ["مشروبات", "ماء معدني", "ماء بارد", 500, "💧"],
-  ["مشروبات", "ريد بول", "مشروب طاقة", 2000, "⚡"],
-  ["مشروبات", "قهوة", "قهوة ساخنة", 2000, "☕"],
-  ["وجبات", "بطاطا مقلية", "بطاطا مقرمشة مع صوص", 2000, "🍟"],
-  ["وجبات", "برغر لحم", "برغر لحم مع بطاطا", 6000, "🍔"],
-  ["وجبات", "زنجر", "ساندويچ زنجر حار", 6500, "🌯"],
-  ["وجبات", "بيتزا", "بيتزا مشكلة", 7000, "🍕"],
-  ["سناكات", "كريب شوكولاتة", "كريب طازج مع شوكولاتة", 4000, "🥞"],
-  ["سناكات", "كيك شوكولاتة", "قطعة كيك غنية بالشوكولاتة", 3000, "🍰"],
-  ["سناكات", "وافل", "وافل مع صوص وحشوة", 4000, "🧇"],
-  ["سناكات", "دونات", "دونات مشكلة", 2500, "🍩"],
-  ["عروض", "عرض الجيمر", "بطاطا + مشروب + سناك", 7000, "🎁"],
-] as const;
-
-async function main() {
-  // =========================
-  // Seed resources + pricing
-  // =========================
-  for (const [type, prefix, name, count, price, displayName, description, imageUrl, sortOrder] of services) {
-    for (let i = 1; i <= count; i++) {
-      const code = `${prefix}${String(i).padStart(2, "0")}`;
-
-      await prisma.resource.upsert({
-        where: { code },
-        update: {
-          name: `${name} ${i}`,
-          type,
-          isActive: true,
-        },
-        create: {
-          code,
-          name: `${name} ${i}`,
-          type,
-          status: ResourceStatus.AVAILABLE,
-        },
-      });
-    }
-
-    await prisma.pricing.upsert({
-      where: { resourceType: type },
-      update: {
-        pricePerHour: price,
-        active: true,
-        displayName: displayName,
-        description: description,
-        imageUrl: imageUrl,
-        sortOrder: sortOrder,
-      },
-      create: {
-        resourceType: type,
-        pricePerHour: price,
-        active: true,
-        displayName: displayName,
-        description: description,
-        imageUrl: imageUrl,
-        sortOrder: sortOrder,
-      },
-    });
-  }
-
-  // =========================
-  // Seed demo customer
-  // =========================
-  const demoPasswordHash = await bcrypt.hash("NinjaZone@2026", 12);
-
-  await prisma.user.upsert({
-    where: {
-      phone: "+9647700000000",
-    },
-    update: {
-      name: "Ninja Zone Demo",
-      role: UserRole.CUSTOMER,
-      isActive: true,
-      passwordHash: demoPasswordHash,
-    },
-    create: {
-      phone: "+9647700000000",
-      name: "Ninja Zone Demo",
-      passwordHash: demoPasswordHash,
-      role: UserRole.CUSTOMER,
-      isActive: true,
-    },
-  });
-
-  // =========================
-  // Seed admin user
-  // =========================
-  const adminPasswordHash = await bcrypt.hash("Admin@2026", 12);
-
-  await prisma.user.upsert({
-    where: {
-      phone: "07851011864",
-    },
-    update: {
-      name: "مدير النظام",
-      role: UserRole.ADMIN,
-      isActive: true,
-      passwordHash: adminPasswordHash,
-    },
-    create: {
-      phone: "07851011864",
-      name: "مدير النظام",
-      passwordHash: adminPasswordHash,
-      role: UserRole.ADMIN,
-      isActive: true,
-    },
-  });
-
-  // =========================
-  // Seed menu
-  // =========================
-  for (const [category, name, description, price, emoji] of menu) {
-    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT "id"
-      FROM "MenuItem"
-      WHERE "name" = ${name}
-      LIMIT 1
-    `;
-
-    if (existing.length > 0) {
-      await prisma.$executeRaw`
-        UPDATE "MenuItem"
-        SET
-          "category" = ${category},
-          "description" = ${description},
-          "price" = ${price},
-          "imageUrl" = ${emoji},
-          "isAvailable" = true,
-          "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "id" = ${existing[0].id}
-      `;
-    } else {
-      await prisma.$executeRaw`
-        INSERT INTO "MenuItem"
-          (
-            "id",
-            "name",
-            "description",
-            "category",
-            "price",
-            "imageUrl",
-            "isAvailable",
-            "createdAt",
-            "updatedAt"
-          )
-        VALUES
-          (
-            ${randomUUID()},
-            ${name},
-            ${description},
-            ${category},
-            ${price},
-            ${emoji},
-            true,
-            CURRENT_TIMESTAMP,
-            CURRENT_TIMESTAMP
-          )
-      `;
-    }
-  }
-
-  const deviceCount = services.reduce((n, service) => n + service[3], 0);
-
-  console.log(
-    `Ninja Zone seeded: ${deviceCount} devices + ${menu.length} menu items`,
+function unauthorized() {
+  return NextResponse.json(
+    { error: "غير مصرح لك بالوصول." },
+    { status: 403 },
   );
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+/* =========================================================
+   GET — Cashier/Admin only
+   ========================================================= */
+export async function GET() {
+  try {
+    const user = await getSession();
+
+    if (
+      !user ||
+      (user.role !== "CASHIER" && user.role !== "ADMIN")
+    ) {
+      return unauthorized();
+    }
+
+    const orders = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        orderNumber: string;
+        customerName: string;
+        phone: string;
+        note: string | null;
+        locationType: string | null;
+        locationLabel: string | null;
+        status: string;
+        totalAmount: number;
+        createdAt: Date;
+        updatedAt: Date;
+        items: unknown;
+      }>
+    >`
+      SELECT
+        o."id",
+        o."orderNumber",
+        o."customerName",
+        o."phone",
+        o."note",
+        o."locationType",
+        o."locationLabel",
+        o."status",
+        o."totalAmount",
+        o."createdAt",
+        o."updatedAt",
+
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', oi."id",
+              'menuItemId', oi."menuItemId",
+              'itemName', oi."itemName",
+              'unitPrice', oi."unitPrice",
+              'quantity', oi."quantity",
+              'totalPrice', oi."totalPrice"
+            )
+            ORDER BY oi."itemName"
+          ) FILTER (WHERE oi."id" IS NOT NULL),
+          '[]'::json
+        ) AS "items"
+
+      FROM "MenuOrder" o
+
+      LEFT JOIN "MenuOrderItem" oi
+        ON oi."orderId" = o."id"
+
+      GROUP BY
+        o."id",
+        o."orderNumber",
+        o."customerName",
+        o."phone",
+        o."note",
+        o."locationType",
+        o."locationLabel",
+        o."status",
+        o."totalAmount",
+        o."createdAt",
+        o."updatedAt"
+
+      ORDER BY
+        CASE o."status"
+          WHEN 'PENDING' THEN 1
+          WHEN 'PREPARING' THEN 2
+          WHEN 'READY' THEN 3
+          WHEN 'COMPLETED' THEN 4
+          WHEN 'CANCELLED' THEN 5
+          ELSE 6
+        END,
+        o."createdAt" DESC
+    `;
+
+    return NextResponse.json({
+      orders,
+    });
+  } catch (error) {
+    console.error(
+      "GET /api/menu/orders failed:",
+      error,
+    );
+
+    return NextResponse.json(
+      { error: "تعذر تحميل الطلبات." },
+      { status: 500 },
+    );
+  }
+}
+
+/* =========================================================
+   POST — Customer order
+   ========================================================= */
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+
+    const customerName = cleanText(
+      body?.customerName,
+      80,
+    );
+
+    const phone = cleanText(
+      body?.phone,
+      20,
+    );
+
+    const note =
+      cleanText(body?.note, 500) || null;
+
+    const locationType = cleanText(
+      body?.locationType,
+      30,
+    );
+
+    const locationLabel = cleanText(
+      body?.locationLabel,
+      100,
+    );
+
+    const rawItems = body?.items;
+
+    /* =====================================================
+       VALIDATION
+       ===================================================== */
+
+    if (customerName.length < 2) {
+      return NextResponse.json(
+        { error: "اكتب اسمك بشكل صحيح." },
+        { status: 400 },
+      );
+    }
+
+    if (!/^07\d{9}$/.test(phone)) {
+      return NextResponse.json(
+        {
+          error:
+            "رقم الهاتف يجب أن يكون 11 رقم ويبدأ بـ 07.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !allowedLocationTypes.includes(
+        locationType as (typeof allowedLocationTypes)[number],
+      )
+    ) {
+      return NextResponse.json(
+        { error: "حدد نوع مكان الطلب." },
+        { status: 400 },
+      );
+    }
+
+    if (!locationLabel) {
+      return NextResponse.json(
+        { error: "حدد رقم الجهاز أو الطاولة." },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !Array.isArray(rawItems) ||
+      rawItems.length < 1 ||
+      rawItems.length > 30
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "السلة فارغة أو تحتوي على عدد كبير من الأصناف.",
+        },
+        { status: 400 },
+      );
+    }
+
+    /* =====================================================
+       NORMALIZE REQUESTED ITEMS
+       ===================================================== */
+
+    const requested = new Map<string, number>();
+
+    for (const row of rawItems) {
+      const id = cleanText(
+        row?.id,
+        100,
+      );
+
+      const quantity = Number(
+        row?.quantity,
+      );
+
+      if (
+        !id ||
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        quantity > 50
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "بيانات أحد أصناف الطلب غير صحيحة.",
+          },
+          { status: 400 },
+        );
+      }
+
+      requested.set(
+        id,
+        (requested.get(id) ?? 0) + quantity,
+      );
+    }
+
+    const ids = [
+      ...requested.keys(),
+    ];
+
+    /* =====================================================
+       LOAD AVAILABLE MENU ITEMS
+       ===================================================== */
+
+    const menuItems =
+      await prisma.$queryRaw<
+        Array<{
+          id: string;
+          name: string;
+          price: number;
+        }>
+      >`
+        SELECT
+          "id",
+          "name",
+          "price"
+        FROM "MenuItem"
+        WHERE "id" IN (${Prisma.join(ids)})
+          AND "isAvailable" = true
+      `;
+
+    if (
+      menuItems.length !== ids.length
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "أحد الأصناف لم يعد متاحاً. حدّث المنيو وحاول مرة ثانية.",
+        },
+        { status: 409 },
+      );
+    }
+
+    const byId = new Map(
+      menuItems.map((item) => [
+        item.id,
+        item,
+      ]),
+    );
+
+    /* =====================================================
+       BUILD ORDER ITEMS
+       ===================================================== */
+
+    const orderItems = ids.map(
+      (id) => {
+        const item =
+          byId.get(id)!;
+
+        const quantity =
+          requested.get(id)!;
+
+        return {
+          menuItemId:
+            item.id,
+
+          itemName:
+            item.name,
+
+          unitPrice:
+            item.price,
+
+          quantity,
+
+          totalPrice:
+            item.price * quantity,
+        };
+      },
+    );
+
+    /* =====================================================
+       TOTAL
+       ===================================================== */
+
+    const totalAmount =
+      orderItems.reduce(
+        (sum, item) =>
+          sum + item.totalPrice,
+        0,
+      );
+
+    /* =====================================================
+       CREATE ORDER (DAILY SEQUENTIAL NUMBER)
+       ===================================================== */
+
+    const orderId = randomUUID();
+    let orderNumber = "";
+
+    await prisma.$transaction(
+      async (tx) => {
+        // حساب بداية اليوم الحالي لحساب تسلسل اليوم
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const countRows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint as count
+          FROM "MenuOrder"
+          WHERE "createdAt" >= ${startOfToday}
+        `;
+
+        const dailyCount = Number(countRows[0]?.count ?? 0) + 1;
+        // الترقيم اليومي التلقائي: #001، #002، #003...
+        orderNumber = `#${String(dailyCount).padStart(3, "0")}`;
+
+        const inserted =
+          await tx.$queryRaw<
+            Array<{
+              orderNumber: string;
+            }>
+          >`
+            INSERT INTO "MenuOrder"
+            (
+              "id",
+              "orderNumber",
+              "customerName",
+              "phone",
+              "note",
+              "locationType",
+              "locationLabel",
+              "status",
+              "totalAmount",
+              "createdAt",
+              "updatedAt"
+            )
+            VALUES
+            (
+              ${orderId},
+              ${orderNumber},
+              ${customerName},
+              ${phone},
+              ${note},
+              ${locationType},
+              ${locationLabel},
+              'PENDING',
+              ${totalAmount},
+              CURRENT_TIMESTAMP,
+              CURRENT_TIMESTAMP
+            )
+            RETURNING
+              "orderNumber"
+          `;
+
+        if (
+          !inserted[0]?.orderNumber
+        ) {
+          throw new Error(
+            "تعذر إنشاء رقم الطلب.",
+          );
+        }
+
+        /* =================================================
+           CREATE ORDER ITEMS
+           ================================================= */
+
+        for (const item of orderItems) {
+          await tx.$executeRaw`
+            INSERT INTO "MenuOrderItem"
+            (
+              "id",
+              "orderId",
+              "menuItemId",
+              "itemName",
+              "unitPrice",
+              "quantity",
+              "totalPrice"
+            )
+            VALUES
+            (
+              ${randomUUID()},
+              ${orderId},
+              ${item.menuItemId},
+              ${item.itemName},
+              ${item.unitPrice},
+              ${item.quantity},
+              ${item.totalPrice}
+            )
+          `;
+        }
+      },
+    );
+
+    /* =====================================================
+       RESPONSE
+       ===================================================== */
+
+    return NextResponse.json(
+      {
+        order: {
+          id: orderId,
+          orderNumber,
+          totalAmount,
+          status: "PENDING",
+          locationType,
+          locationLabel,
+        },
+      },
+      {
+        status: 201,
+      },
+    );
+  } catch (error) {
+    console.error(
+      "POST /api/menu/orders failed:",
+      error,
+    );
+
+    const detail =
+      process.env.NODE_ENV !== "production" &&
+      error instanceof Error
+        ? ` (${error.message})`
+        : "";
+
+    return NextResponse.json(
+      {
+        error:
+          `تعذر إرسال الطلب من قاعدة البيانات.${detail}`,
+      },
+      { status: 500 },
+    );
+  }
+}
+
+/* =========================================================
+   PATCH — Cashier/Admin only
+   ========================================================= */
+export async function PATCH(
+  request: Request,
+) {
+  try {
+    const user = await getSession();
+
+    if (
+      !user ||
+      (user.role !== "CASHIER" &&
+        user.role !== "ADMIN")
+    ) {
+      return unauthorized();
+    }
+
+    const body =
+      await request.json();
+
+    const orderId = cleanText(
+      body?.orderId,
+      100,
+    );
+
+    const status = cleanText(
+      body?.status,
+      30,
+    );
+
+    if (!orderId) {
+      return NextResponse.json(
+        {
+          error:
+            "رقم الطلب غير صحيح.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !allowedStatuses.includes(
+        status as (typeof allowedStatuses)[number],
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "حالة الطلب غير صحيحة.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const updated =
+      await prisma.$queryRaw<
+        Array<{
+          id: string;
+          status: string;
+          updatedAt: Date;
+        }>
+      >`
+        UPDATE "MenuOrder"
+        SET
+          "status" =
+            ${status}::"MenuOrderStatus",
+          "updatedAt" =
+            CURRENT_TIMESTAMP
+
+        WHERE "id" = ${orderId}
+
+        RETURNING
+          "id",
+          "status",
+          "updatedAt"
+      `;
+
+    if (
+      updated.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "الطلب غير موجود.",
+        },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({
+      order: updated[0],
+    });
+  } catch (error) {
+    console.error(
+      "PATCH /api/menu/orders failed:",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "تعذر تحديث حالة الطلب.",
+      },
+      { status: 500 },
+    );
+  }
+}

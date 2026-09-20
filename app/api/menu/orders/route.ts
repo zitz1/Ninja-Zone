@@ -34,16 +34,6 @@ function unauthorized() {
   );
 }
 
-// دالة لتوليد رقم طلب مميز وقصير
-function generateOrderNumber() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = 'NZ-';
-  for (let i = 0; i < 6; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
 /* =========================================================
    GET — Cashier/Admin only
    ========================================================= */
@@ -356,17 +346,28 @@ export async function POST(request: Request) {
       );
 
     /* =====================================================
-       CREATE ORDER
+       CREATE ORDER (DAILY SEQUENTIAL NUMBER)
        ===================================================== */
 
-    const orderId =
-      randomUUID();
-
-    // توليد رقم الطلب هنا بدلاً من انتظار قاعدة البيانات
-    const orderNumber = generateOrderNumber();
+    const orderId = randomUUID();
+    let orderNumber = "";
 
     await prisma.$transaction(
       async (tx) => {
+        // حساب بداية اليوم الحالي لحساب تسلسل اليوم
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const countRows = await tx.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint as count
+          FROM "MenuOrder"
+          WHERE "createdAt" >= ${startOfToday}
+        `;
+
+        const dailyCount = Number(countRows[0]?.count ?? 0) + 1;
+        // الترقيم اليومي التلقائي: #001، #002، #003...
+        orderNumber = `#${String(dailyCount).padStart(3, "0")}`;
+
         const inserted =
           await tx.$queryRaw<
             Array<{
@@ -376,7 +377,7 @@ export async function POST(request: Request) {
             INSERT INTO "MenuOrder"
             (
               "id",
-              "orderNumber", /* أضفنا الحقل هنا */
+              "orderNumber",
               "customerName",
               "phone",
               "note",
@@ -390,7 +391,7 @@ export async function POST(request: Request) {
             VALUES
             (
               ${orderId},
-              ${orderNumber}, /* أضفنا القيمة هنا */
+              ${orderNumber},
               ${customerName},
               ${phone},
               ${note},
