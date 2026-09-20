@@ -125,7 +125,7 @@ export function CustomerShell({
         const [ordersRes, bookingsRes] = await Promise.all([
           fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
           // فحص الحجوزات مع استعلام يشمل كل الأيام المعلقة
-          fetch(`/api/cashier/bookings?date=ALL&t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
+          fetch(`/api/cashier/bookings?pendingOnly=true&t=${Date.now()}`, { cache: "no-store" })
         ]);
 
         let ordersCount = 0;

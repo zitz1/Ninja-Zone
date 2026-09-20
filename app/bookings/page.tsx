@@ -78,6 +78,7 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [openBookingId, setOpenBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -89,9 +90,7 @@ export default function BookingsPage() {
 
         if (!response.ok) {
           if (response.status === 401) {
-            if (mounted) {
-              setError("يجب تسجيل الدخول لعرض حجوزاتك.");
-            }
+            if (mounted) setError("يجب تسجيل الدخول لعرض حجوزاتك.");
             return;
           }
           throw new Error(data.error || "تعذر تحميل الحجوزات.");
@@ -106,14 +105,11 @@ export default function BookingsPage() {
           setError(err instanceof Error ? err.message : "تعذر تحميل الحجوزات.");
         }
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     }
 
     loadBookings();
-
     return () => {
       mounted = false;
     };
@@ -123,7 +119,14 @@ export default function BookingsPage() {
     if (filter === "ALL") return true;
     if (filter === "UPCOMING") return b.status === "PENDING" || b.status === "CONFIRMED";
     if (filter === "ACTIVE") return b.status === "ACTIVE";
-    if (filter === "PAST") return b.status === "COMPLETED" || b.status === "CANCELLED" || b.status === "EXPIRED" || b.status === "NO_SHOW" || b.status === "REJECTED";
+    if (filter === "PAST")
+      return (
+        b.status === "COMPLETED" ||
+        b.status === "CANCELLED" ||
+        b.status === "EXPIRED" ||
+        b.status === "NO_SHOW" ||
+        b.status === "REJECTED"
+      );
     return true;
   });
 
@@ -134,7 +137,7 @@ export default function BookingsPage() {
           <div>
             <span className="nz-label">MY BOOKINGS</span>
             <h1>حجوزاتي</h1>
-            <p>تابع جميع حجوزاتك الحالية والسابقة مع حالتها وتفاصيلها.</p>
+            <p>اضغط على أي حجز لعرض أو إخفاء التفاصيل الكاملة.</p>
           </div>
         </header>
 
@@ -185,64 +188,103 @@ export default function BookingsPage() {
               <div className="nz-bookings-list">
                 {filtered.map((booking) => {
                   const status = STATUS_LABELS[booking.status] || STATUS_LABELS.PENDING;
+                  const isOpen = openBookingId === booking.id;
+                  const primaryItem = booking.items[0];
+
                   return (
-                    <article className="nz-booking-card" key={booking.id}>
-                      <div className="nz-booking-top">
-                        <div className="nz-booking-number">
-                          <span>رقم الحجز</span>
-                          <strong>{booking.bookingNumber}</strong>
-                        </div>
-                        <span className="nz-booking-status" style={{ color: status.color, background: status.bg }}>
-                          <i style={{ background: status.color }} />
-                          {status.label}
-                        </span>
-                      </div>
-
-                      <div className="nz-booking-dates">
-                        <div>
-                          <span>التاريخ</span>
-                          <strong>{formatDate(booking.startAt)}</strong>
-                        </div>
-                        <div>
-                          <span>البداية</span>
-                          <strong>{formatTime(booking.startAt)}</strong>
-                        </div>
-                        <div>
-                          <span>النهاية</span>
-                          <strong>{formatTime(booking.endAt)}</strong>
-                        </div>
-                      </div>
-
-                      <div className="nz-booking-items">
-                        {booking.items.map((item) => (
-                          <div className="nz-booking-item" key={item.id}>
-                            <span className="nz-booking-item-icon">
-                              {item.resourceType === "PS5" ? "PS" : item.resourceType === "CINEMA" ? "C" : item.resourceType === "BILLIARD" ? "B" : item.resourceType === "TABLE" ? "T" : "PC"}
-                            </span>
-                            <div>
-                              <strong>{RESOURCE_LABELS[item.resourceType] || item.resourceType}</strong>
-                              <small>{item.resource?.name || item.resource?.code || "جهاز غير محدد"}</small>
-                            </div>
-                            <div className="nz-booking-item-time">
-                              <span>{formatTime(item.startAt)} — {formatTime(item.endAt)}</span>
-                              <small>{item.durationMinutes} دقيقة</small>
-                            </div>
-                            <strong className="nz-booking-item-price">{money(item.totalPrice)}</strong>
+                    <article className={`nz-booking-card ${isOpen ? "open" : ""}`} key={booking.id}>
+                      {/* الشريط الرئيسي القابل للضغط للانسدال والإغلاق */}
+                      <button
+                        type="button"
+                        className="nz-booking-summary-btn"
+                        onClick={() => setOpenBookingId(isOpen ? null : booking.id)}
+                        aria-expanded={isOpen}
+                      >
+                        <div className="nz-booking-summary-right">
+                          <div className="nz-booking-avatar">
+                            {primaryItem?.resourceType === "PS5"
+                              ? "PS"
+                              : primaryItem?.resourceType === "CINEMA"
+                              ? "C"
+                              : primaryItem?.resourceType === "BILLIARD"
+                              ? "B"
+                              : "PC"}
                           </div>
-                        ))}
-                      </div>
 
-                      {booking.customerNote && (
-                        <div className="nz-booking-note">
-                          <span>ملاحظتك</span>
-                          <p>{booking.customerNote}</p>
+                          <div>
+                            <div className="nz-booking-title-row">
+                              <strong>{booking.bookingNumber || `#${booking.id.slice(-6)}`}</strong>
+                              <span className="nz-booking-res-name">
+                                {RESOURCE_LABELS[primaryItem?.resourceType || ""] || primaryItem?.resourceType}
+                              </span>
+                            </div>
+                            <small className="nz-booking-time-preview">
+                              {formatDate(booking.startAt)} • من {formatTime(booking.startAt)} إلى {formatTime(booking.endAt)}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="nz-booking-summary-left">
+                          <strong className="nz-booking-price-preview">{money(booking.totalAmount)}</strong>
+                          <span className="nz-booking-status" style={{ color: status.color, background: status.bg }}>
+                            <i style={{ background: status.color }} />
+                            {status.label}
+                          </span>
+                          <span className={`nz-accordion-chevron ${isOpen ? "open" : ""}`}>›</span>
+                        </div>
+                      </button>
+
+                      {/* المحتوى المنسدل الذي يظهر ويختفي بحرية */}
+                      {isOpen && (
+                        <div className="nz-booking-dropdown-content">
+                          <div className="nz-booking-dates">
+                            <div>
+                              <span>تاريخ الحضور</span>
+                              <strong>{formatDate(booking.startAt)}</strong>
+                            </div>
+                            <div>
+                              <span>وقت البدء</span>
+                              <strong>{formatTime(booking.startAt)}</strong>
+                            </div>
+                            <div>
+                              <span>وقت الانتهاء</span>
+                              <strong>{formatTime(booking.endAt)}</strong>
+                            </div>
+                          </div>
+
+                          <div className="nz-booking-items">
+                            <span className="nz-items-label">الأجهزة المحجوزة:</span>
+                            {booking.items.map((item) => (
+                              <div className="nz-booking-item" key={item.id}>
+                                <span className="nz-booking-item-icon">
+                                  {item.resourceType === "PS5" ? "PS" : item.resourceType === "CINEMA" ? "C" : "PC"}
+                                </span>
+                                <div>
+                                  <strong>{RESOURCE_LABELS[item.resourceType] || item.resourceType}</strong>
+                                  <small>{item.resource?.name || item.resource?.code || "جهاز محدد"}</small>
+                                </div>
+                                <div className="nz-booking-item-time">
+                                  <span>{formatTime(item.startAt)} — {formatTime(item.endAt)}</span>
+                                  <small>{item.durationMinutes} دقيقة</small>
+                                </div>
+                                <strong className="nz-booking-item-price">{money(item.totalPrice)}</strong>
+                              </div>
+                            ))}
+                          </div>
+
+                          {booking.customerNote && (
+                            <div className="nz-booking-note">
+                              <span>ملاحظتك للكاشير</span>
+                              <p>{booking.customerNote}</p>
+                            </div>
+                          )}
+
+                          <div className="nz-booking-total">
+                            <span>المبلغ المطلوب</span>
+                            <strong>{money(booking.totalAmount)}</strong>
+                          </div>
                         </div>
                       )}
-
-                      <div className="nz-booking-total">
-                        <span>إجمالي الحجز</span>
-                        <strong>{money(booking.totalAmount)}</strong>
-                      </div>
                     </article>
                   );
                 })}
@@ -272,7 +314,6 @@ export default function BookingsPage() {
           margin: 8px 0 0;
           color: #7c8492;
           font-size: 13px;
-          line-height: 1.8;
         }
 
         .nz-bookings-error {
@@ -288,17 +329,6 @@ export default function BookingsPage() {
           margin-bottom: 20px;
         }
 
-        .nz-bookings-error strong {
-          color: #ff8e9f;
-        }
-
-        .nz-bookings-error .nz-btn {
-          margin-inline-start: auto;
-          min-height: 36px;
-          padding: 0 14px;
-          font-size: 10px;
-        }
-
         .nz-bookings-tabs {
           display: flex;
           gap: 8px;
@@ -312,31 +342,305 @@ export default function BookingsPage() {
           border-radius: 10px;
           background: #0d0f13;
           color: #8f98a6;
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 800;
           cursor: pointer;
           transition: 0.15s ease;
         }
 
-        .nz-bookings-tabs button:hover {
-          color: #d5dae3;
-          border-color: #3a3e49;
-        }
-
         .nz-bookings-tabs button.active {
           color: #fff;
           background: rgba(139, 92, 246, 0.12);
-          border-color: rgba(139, 92, 246, 0.3);
+          border-color: rgba(139, 92, 246, 0.35);
         }
 
-        .nz-bookings-loading {
+        .nz-bookings-list {
+          display: grid;
+          gap: 12px;
+        }
+
+        .nz-booking-card {
+          border: 1px solid #212630;
+          border-radius: 16px;
+          background: #101218;
+          overflow: hidden;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .nz-booking-card:hover,
+        .nz-booking-card.open {
+          border-color: #373e4d;
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        }
+
+        /* زر الشريط الرئيسي للانسدال */
+        .nz-booking-summary-btn {
+          width: 100%;
+          padding: 16px 20px;
+          background: transparent;
+          border: 0;
+          color: inherit;
+          font: inherit;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          text-align: right;
+        }
+
+        .nz-booking-summary-right {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .nz-booking-avatar {
+          width: 42px;
+          height: 42px;
+          border-radius: 12px;
+          background: rgba(155, 123, 255, 0.12);
+          border: 1px solid rgba(155, 123, 255, 0.25);
+          color: #c4b5fd;
+          font-size: 13px;
+          font-weight: 950;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 12px;
-          min-height: 300px;
-          color: #68717e;
+          flex-shrink: 0;
+        }
+
+        .nz-booking-title-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .nz-booking-title-row strong {
+          color: #fff;
+          font-size: 14px;
+          font-weight: 950;
+        }
+
+        .nz-booking-res-name {
+          color: #8e97a4;
+          font-size: 11px;
+        }
+
+        .nz-booking-time-preview {
+          display: block;
+          margin-top: 4px;
+          color: #646d7b;
+          font-size: 10px;
+        }
+
+        .nz-booking-summary-left {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .nz-booking-price-preview {
+          color: #fff;
+          font-size: 13px;
+          font-weight: 950;
+        }
+
+        .nz-booking-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 11px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 900;
+        }
+
+        .nz-booking-status i {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+        }
+
+        .nz-accordion-chevron {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          font-size: 18px;
+          color: #6d7685;
+          transform: rotate(90deg);
+          transition: transform 0.2s ease, color 0.2s ease;
+        }
+
+        .nz-accordion-chevron.open {
+          transform: rotate(-90deg);
+          color: #c4b5fd;
+        }
+
+        /* المحتوى المنسدل */
+        .nz-booking-dropdown-content {
+          padding: 16px 20px 20px;
+          border-top: 1px solid #1c2028;
+          background: #0d0f14;
+          animation: expandAnim 0.2s ease-out;
+        }
+
+        @keyframes expandAnim {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .nz-booking-dates {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+
+        .nz-booking-dates > div {
+          padding: 12px;
+          border: 1px solid #1c212a;
+          border-radius: 12px;
+          background: #090a0e;
+        }
+
+        .nz-booking-dates span {
+          display: block;
+          color: #5d6776;
+          font-size: 9px;
+        }
+
+        .nz-booking-dates strong {
+          display: block;
+          margin-top: 5px;
+          color: #d1d6e0;
           font-size: 12px;
+        }
+
+        .nz-items-label {
+          display: block;
+          color: #8b95a5;
+          font-size: 11px;
+          font-weight: 800;
+          margin-bottom: 8px;
+        }
+
+        .nz-booking-items {
+          display: grid;
+          gap: 8px;
+          margin-bottom: 14px;
+        }
+
+        .nz-booking-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          border: 1px solid #1c212a;
+          border-radius: 12px;
+          background: #090a0e;
+        }
+
+        .nz-booking-item-icon {
+          width: 34px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 9px;
+          background: rgba(155, 123, 255, 0.1);
+          color: #b8aaff;
+          font-size: 10px;
+          font-weight: 950;
+        }
+
+        .nz-booking-item > div:nth-child(2) {
+          flex: 1;
+        }
+
+        .nz-booking-item > div:nth-child(2) strong {
+          display: block;
+          font-size: 11px;
+        }
+
+        .nz-booking-item > div:nth-child(2) small {
+          display: block;
+          margin-top: 2px;
+          color: #5f6877;
+          font-size: 9px;
+        }
+
+        .nz-booking-item-time {
+          text-align: center;
+        }
+
+        .nz-booking-item-time span {
+          display: block;
+          color: #9ba4b2;
+          font-size: 10px;
+        }
+
+        .nz-booking-item-time small {
+          display: block;
+          color: #5f6877;
+          font-size: 9px;
+        }
+
+        .nz-booking-item-price {
+          font-size: 12px;
+          color: #c4b5fd;
+        }
+
+        .nz-booking-note {
+          padding: 12px;
+          border-radius: 12px;
+          background: rgba(155, 123, 255, 0.05);
+          border: 1px solid rgba(155, 123, 255, 0.15);
+          margin-bottom: 14px;
+        }
+
+        .nz-booking-note span {
+          color: #c4b5fd;
+          font-size: 9px;
+          font-weight: 900;
+        }
+
+        .nz-booking-note p {
+          margin: 4px 0 0;
+          color: #909aa8;
+          font-size: 11px;
+        }
+
+        .nz-booking-total {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding-top: 14px;
+          border-top: 1px solid #1c212a;
+        }
+
+        .nz-booking-total span {
+          color: #717b8b;
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .nz-booking-total strong {
+          font-size: 16px;
+          font-weight: 950;
+          color: #31d48b;
+        }
+
+        .nz-bookings-loading,
+        .nz-empty-page {
+          min-height: 350px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
         }
 
         .nz-loader {
@@ -349,257 +653,21 @@ export default function BookingsPage() {
         }
 
         @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        .nz-empty-page {
-          min-height: 400px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          gap: 10px;
-          border: 1px solid #212630;
-          border-radius: 18px;
-          background: #101218;
-          padding: 30px;
-        }
-
-        .nz-empty-mark {
-          width: 70px;
-          height: 70px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 20px;
-          background: rgba(155, 123, 255, 0.1);
-          color: #b8aaff;
-          font-size: 28px;
-          margin-bottom: 8px;
-        }
-
-        .nz-empty-page h2 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 950;
-        }
-
-        .nz-empty-page p {
-          margin: 0;
-          color: #68717e;
-          font-size: 12px;
-        }
-
-        .nz-empty-page .nz-btn {
-          margin-top: 14px;
-        }
-
-        .nz-bookings-list {
-          display: grid;
-          gap: 14px;
-        }
-
-        .nz-booking-card {
-          border: 1px solid #212630;
-          border-radius: 16px;
-          background: #101218;
-          padding: 18px;
-        }
-
-        .nz-booking-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 16px;
-        }
-
-        .nz-booking-number span,
-        .nz-booking-number strong {
-          display: block;
-        }
-
-        .nz-booking-number span {
-          color: #5d6673;
-          font-size: 8px;
-          font-weight: 900;
-        }
-
-        .nz-booking-number strong {
-          margin-top: 4px;
-          font-size: 13px;
-          font-weight: 950;
-          color: #c4b5fd;
-        }
-
-        .nz-booking-status {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 7px 11px;
-          border-radius: 999px;
-          font-size: 9px;
-          font-weight: 900;
-        }
-
-        .nz-booking-status i {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-        }
-
-        .nz-booking-dates {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          margin-bottom: 16px;
-        }
-
-        .nz-booking-dates > div {
-          padding: 10px;
-          border: 1px solid #1d222a;
-          border-radius: 10px;
-          background: #0b0d11;
-        }
-
-        .nz-booking-dates span,
-        .nz-booking-dates strong {
-          display: block;
-        }
-
-        .nz-booking-dates span {
-          color: #515a67;
-          font-size: 8px;
-        }
-
-        .nz-booking-dates strong {
-          margin-top: 5px;
-          color: #c9ced6;
-          font-size: 11px;
-        }
-
-        .nz-booking-items {
-          display: grid;
-          gap: 8px;
-          margin-bottom: 14px;
-        }
-
-        .nz-booking-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px;
-          border: 1px solid #1d222a;
-          border-radius: 10px;
-          background: #0b0d11;
-        }
-
-        .nz-booking-item-icon {
-          width: 34px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 9px;
-          background: rgba(155, 123, 255, 0.1);
-          color: #b8aaff;
-          font-size: 9px;
-          font-weight: 950;
-          flex-shrink: 0;
-        }
-
-        .nz-booking-item > div:nth-child(2) {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .nz-booking-item > div:nth-child(2) strong,
-        .nz-booking-item > div:nth-child(2) small {
-          display: block;
-        }
-
-        .nz-booking-item > div:nth-child(2) strong {
-          font-size: 10px;
-        }
-
-        .nz-booking-item > div:nth-child(2) small {
-          margin-top: 3px;
-          color: #596270;
-          font-size: 8px;
-        }
-
-        .nz-booking-item-time {
-          text-align: center;
-        }
-
-        .nz-booking-item-time span,
-        .nz-booking-item-time small {
-          display: block;
-        }
-
-        .nz-booking-item-time span {
-          color: #aab2bf;
-          font-size: 9px;
-        }
-
-        .nz-booking-item-time small {
-          margin-top: 3px;
-          color: #596270;
-          font-size: 8px;
-        }
-
-        .nz-booking-item-price {
-          font-size: 11px;
-          font-weight: 950;
-          color: #c4b5fd;
-          white-space: nowrap;
-        }
-
-        .nz-booking-note {
-          padding: 10px 12px;
-          border-radius: 10px;
-          background: rgba(155, 123, 255, 0.05);
-          border: 1px solid rgba(155, 123, 255, 0.12);
-          margin-bottom: 14px;
-        }
-
-        .nz-booking-note span {
-          color: #c1b4ff;
-          font-size: 8px;
-          font-weight: 900;
-        }
-
-        .nz-booking-note p {
-          margin: 6px 0 0;
-          color: #7d8692;
-          font-size: 10px;
-          line-height: 1.7;
-        }
-
-        .nz-booking-total {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-top: 14px;
-          border-top: 1px solid #1d222a;
-        }
-
-        .nz-booking-total span {
-          color: #68717e;
-          font-size: 10px;
-          font-weight: 900;
-        }
-
-        .nz-booking-total strong {
-          font-size: 16px;
-          font-weight: 950;
-          color: #fff;
+          to { transform: rotate(360deg); }
         }
 
         @media (max-width: 650px) {
+          .nz-booking-summary-btn {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+
+          .nz-booking-summary-left {
+            width: 100%;
+            justify-content: space-between;
+          }
+
           .nz-booking-dates {
             grid-template-columns: 1fr;
           }
@@ -610,12 +678,6 @@ export default function BookingsPage() {
 
           .nz-booking-item-time {
             text-align: right;
-            flex: 1;
-          }
-
-          .nz-booking-item-price {
-            width: 100%;
-            text-align: left;
           }
         }
       `}</style>
