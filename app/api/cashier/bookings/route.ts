@@ -19,103 +19,31 @@ async function requireCashier() {
   if (!session) {
     return {
       error: NextResponse.json(
-        {
-          error: "غير مصرح لك بالوصول.",
-        },
-        {
-          status: 401,
-        },
+        { error: "غير مصرح لك بالوصول." },
+        { status: 401 }
       ),
     };
   }
 
-  if (
-    session.role !== "CASHIER" &&
-    session.role !== "ADMIN"
-  ) {
+  if (session.role !== "CASHIER" && session.role !== "ADMIN") {
     return {
       error: NextResponse.json(
-        {
-          error: "ليس لديك صلاحية لإدارة الحجوزات.",
-        },
-        {
-          status: 403,
-        },
+        { error: "ليس لديك صلاحية لإدارة الحجوزات." },
+        { status: 403 }
       ),
     };
   }
 
-  return {
-    session,
-  };
+  return { session };
 }
 
 function iraqToday() {
-  return new Intl.DateTimeFormat(
-    "en-CA",
-    {
-      timeZone: "Asia/Baghdad",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    },
-  ).format(new Date());
-}
-
-async function finalizeExpiredActiveBookings() {
-  const now = new Date();
-
-  const expiredBookings = await prisma.booking.findMany({
-    where: {
-      status: BookingStatus.ACTIVE,
-      endAt: {
-        lte: now,
-      },
-    },
-    select: {
-      id: true,
-      items: {
-        select: {
-          resourceId: true,
-        },
-      },
-    },
-  });
-
-  if (!expiredBookings.length) return;
-
-  await prisma.$transaction(async (tx) => {
-    for (const booking of expiredBookings) {
-      const updated = await tx.booking.updateMany({
-        where: {
-          id: booking.id,
-          status: BookingStatus.ACTIVE,
-          endAt: {
-            lte: now,
-          },
-        },
-        data: {
-          status: BookingStatus.COMPLETED,
-          expiresAt: null,
-        },
-      });
-
-      if (updated.count === 0) continue;
-
-      for (const item of booking.items) {
-        if (!item.resourceId) continue;
-
-        await tx.resource.update({
-          where: {
-            id: item.resourceId,
-          },
-          data: {
-            status: ResourceStatus.AVAILABLE,
-          },
-        });
-      }
-    }
-  });
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Baghdad",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 function iraqDayRange(date: string) {
@@ -126,15 +54,11 @@ function iraqDayRange(date: string) {
 }
 
 async function buildBookingView(bookingIds: string[]) {
-  if (!bookingIds.length) {
-    return new Map();
-  }
+  if (!bookingIds.length) return new Map();
 
   const payments = await prisma.payment.findMany({
     where: {
-      bookingId: {
-        in: bookingIds,
-      },
+      bookingId: { in: bookingIds },
     },
     select: {
       bookingId: true,
@@ -144,24 +68,16 @@ async function buildBookingView(bookingIds: string[]) {
   });
 
   const paid = new Map<string, number>();
-
   for (const payment of payments) {
-    if (payment.status !== PaymentStatus.PAID) {
-      continue;
-    }
-
+    if (payment.status !== PaymentStatus.PAID) continue;
     paid.set(
       payment.bookingId,
-      (paid.get(payment.bookingId) || 0) + payment.amount,
+      (paid.get(payment.bookingId) || 0) + payment.amount
     );
   }
 
   const bookings = await prisma.booking.findMany({
-    where: {
-      id: {
-        in: bookingIds,
-      },
-    },
+    where: { id: { in: bookingIds } },
     select: {
       id: true,
       totalAmount: true,
@@ -194,70 +110,34 @@ async function buildBookingView(bookingIds: string[]) {
           paymentStatus,
         },
       ];
-    }),
+    })
   );
 }
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireCashier();
-    if ("error" in auth) {
-      return auth.error;
-    }
+    if ("error" in auth) return auth.error;
 
-    await finalizeExpiredActiveBookings();
-
-    const date =
-      request.nextUrl.searchParams.get("date") || iraqToday();
-
+    const date = request.nextUrl.searchParams.get("date") || iraqToday();
     const { start, end } = iraqDayRange(date);
 
     const bookings = await prisma.booking.findMany({
       where: {
         OR: [
-          {
-            startAt: {
-              gte: start,
-              lte: end,
-            },
-          },
-          {
-            endAt: {
-              gte: start,
-              lte: end,
-            },
-          },
-          {
-            startAt: {
-              lte: start,
-            },
-            endAt: {
-              gte: end,
-            },
-          },
+          { startAt: { gte: start, lte: end } },
+          { endAt: { gte: start, lte: end } },
+          { startAt: { lte: start }, endAt: { gte: end } },
         ],
       },
-      orderBy: [
-        {
-          startAt: "asc",
-        },
-        {
-          createdAt: "asc",
-        },
-      ],
+      orderBy: [{ startAt: "asc" }, { createdAt: "asc" }],
       include: {
         user: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-          },
+          select: { id: true, name: true, phone: true },
         },
         invoices: true,
         items: {
-          orderBy: {
-            startAt: "asc",
-          },
+          orderBy: { startAt: "asc" },
           include: {
             resource: {
               select: {
@@ -273,9 +153,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const paymentMap = await buildBookingView(
-      bookings.map((booking) => booking.id),
-    );
+    const paymentMap = await buildBookingView(bookings.map((b) => b.id));
 
     return NextResponse.json({
       date,
@@ -299,9 +177,7 @@ export async function GET(request: NextRequest) {
           payment: {
             invoiceId: payment?.invoiceId ?? booking.invoices?.id ?? null,
             invoiceNumber:
-              payment?.invoiceNumber ??
-              booking.invoices?.invoiceNumber ??
-              null,
+              payment?.invoiceNumber ?? booking.invoices?.invoiceNumber ?? null,
             totalAmount: booking.totalAmount,
             paidAmount,
             remainingAmount,
@@ -313,12 +189,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Cashier bookings GET error:", error);
     return NextResponse.json(
-      {
-        error: "تعذر تحميل الحجوزات.",
-      },
-      {
-        status: 500,
-      },
+      { error: "تعذر تحميل الحجوزات." },
+      { status: 500 }
     );
   }
 }
@@ -326,9 +198,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await requireCashier();
-    if ("error" in auth) {
-      return auth.error;
-    }
+    if ("error" in auth) return auth.error;
 
     const body = (await request.json()) as {
       bookingId?: string;
@@ -338,49 +208,34 @@ export async function PATCH(request: NextRequest) {
 
     if (!body.bookingId) {
       return NextResponse.json(
-        {
-          error: "رقم الحجز مطلوب.",
-        },
-        {
-          status: 400,
-        },
+        { error: "رقم الحجز مطلوب." },
+        { status: 400 }
       );
     }
 
     const booking = await prisma.booking.findUnique({
-      where: {
-        id: body.bookingId,
-      },
-      include: {
-        items: true,
-        invoices: true,
-      },
+      where: { id: body.bookingId },
+      include: { items: true, invoices: true },
     });
 
     if (!booking) {
       return NextResponse.json(
-        {
-          error: "الحجز غير موجود.",
-        },
-        {
-          status: 404,
-        },
+        { error: "الحجز غير موجود." },
+        { status: 404 }
       );
     }
 
-    // إذا كان الإجراء دفع نقدي أو إنهاء مع استلام المبلغ
-    const shouldRecordPayment =
-      body.action === "PAY_CASH" || body.status === BookingStatus.COMPLETED;
+    // تحديد الحالة القادمة
+    let nextStatus: BookingStatus = body.status || booking.status;
 
-    const nextStatus =
-      body.status ||
-      (body.action === "PAY_CASH"
-        ? BookingStatus.COMPLETED
-        : booking.status);
+    // إذا كان الإجراء دفع وبدء الجلسة: تصبح الحالة ACTIVE
+    if (body.action === "START_AND_PAY") {
+      nextStatus = BookingStatus.ACTIVE;
+    }
 
     const updated = await prisma.$transaction(
       async (tx) => {
-        // تحديث حالة الأجهزة حسب حالة الحجز
+        // إذا بدأت الجلسة
         if (nextStatus === BookingStatus.ACTIVE) {
           for (const item of booking.items) {
             if (item.resourceId) {
@@ -392,6 +247,7 @@ export async function PATCH(request: NextRequest) {
           }
         }
 
+        // إذا انتهت الجلسة أو تم الإلغاء
         if (
           nextStatus === BookingStatus.COMPLETED ||
           nextStatus === BookingStatus.CANCELLED
@@ -406,8 +262,8 @@ export async function PATCH(request: NextRequest) {
           }
         }
 
-        // إنشاء الفاتورة والدفعة النقدية إذا لم تكن مدفوعة
-        if (shouldRecordPayment) {
+        // إذا طُلب استلام الدفعة النقدية
+        if (body.action === "START_AND_PAY" || body.action === "PAY_CASH") {
           let invoice = booking.invoices;
 
           if (!invoice) {
@@ -430,7 +286,6 @@ export async function PATCH(request: NextRequest) {
             });
           }
 
-          // فحص هل سُجلت دفعة مسبقاً
           const existingPayment = await tx.payment.findFirst({
             where: {
               bookingId: booking.id,
@@ -455,55 +310,34 @@ export async function PATCH(request: NextRequest) {
           }
         }
 
-        // تحديث الحجز
         return tx.booking.update({
           where: { id: booking.id },
           data: {
             status: nextStatus,
             expiresAt: null,
             ...(nextStatus === BookingStatus.CONFIRMED
-              ? {
-                  approvedAt: new Date(),
-                  approvedById: auth.session.id,
-                }
+              ? { approvedAt: new Date(), approvedById: auth.session.id }
               : {}),
           },
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                phone: true,
-              },
-            },
-            items: {
-              include: {
-                resource: true,
-              },
-            },
+            user: { select: { id: true, name: true, phone: true } },
+            items: { include: { resource: true } },
             invoices: true,
           },
         });
       },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
 
     return NextResponse.json({
       booking: updated,
-      message: "تم تحديث الحجز واستلام المبلغ بنجاح.",
+      message: "تم تحديث الحجز بنجاح.",
     });
   } catch (error) {
     console.error("Cashier bookings PATCH error:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "تعذر تنفيذ العملية.",
-      },
-      {
-        status: 500,
-      },
+      { error: error instanceof Error ? error.message : "تعذر تنفيذ العملية." },
+      { status: 500 }
     );
   }
 }
