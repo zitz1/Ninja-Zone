@@ -78,7 +78,7 @@ export function CustomerShell({
   const [soundUnlocked, setSoundUnlocked] = useState(false);
   const prevCashierTotalRef = useRef<number | null>(null);
 
-  // تتبع الزبون لطلباته وحجوزاته
+  // تتبع الزبون لطلبات المنيو وحجوزات الأجهزة
   const [activeCustomerOrder, setActiveCustomerOrder] = useState<CustomerOrder | null>(null);
   const [activeCustomerBooking, setActiveCustomerBooking] = useState<CustomerBooking | null>(null);
   const prevCustomerStatusRef = useRef<string>("");
@@ -124,8 +124,7 @@ export function CustomerShell({
       try {
         const [ordersRes, bookingsRes] = await Promise.all([
           fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
-          // فحص الحجوزات مع استعلام يشمل كل الأيام المعلقة
-          fetch(`/api/cashier/bookings?pendingOnly=true&t=${Date.now()}`, { cache: "no-store" })
+          fetch(`/api/cashier/bookings?pendingOnly=true&t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
         ]);
 
         let ordersCount = 0;
@@ -171,36 +170,56 @@ export function CustomerShell({
     }
   }, [user]);
 
-  // 3. مراقبة للزبون (فحص حالة طلبه وحجزه الحالي وتنبيهه فوراً عند التغيير)
+  // 3. مراقبة للزبون (تتبع طلبات المنيو وحجوزات الأجهزة وتنبيهه عند التغيير)
   useEffect(() => {
     let mounted = true;
 
-    async function trackCustomerOrdersAndBookings() {
+    async function trackCustomerActivity() {
       if (!user || user.role === "CASHIER" || user.role === "ADMIN") {
         return;
       }
 
       try {
+        // فحص حجوزات الأجهزة للزبون
         const bookingsRes = await fetch(`/api/my-bookings?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
         if (bookingsRes && bookingsRes.ok) {
           const bData = await bookingsRes.json();
           if (Array.isArray(bData.bookings)) {
-            // جلب أحدث حجز جاري أو بانتظار التأكيد
             const currentBooking = bData.bookings.find((b: CustomerBooking) =>
               b.status === "PENDING" || b.status === "CONFIRMED" || b.status === "ACTIVE"
             );
 
             if (mounted && currentBooking) {
               setActiveCustomerBooking(currentBooking);
-
-              // إذا تغيرت الحالة (مثلاً من PENDING إلى CONFIRMED)، نطلق تنبيهاً للزبون
               const statusKey = `B-${currentBooking.id}-${currentBooking.status}`;
               if (prevCustomerStatusRef.current && prevCustomerStatusRef.current !== statusKey) {
-                playToneNotification(784, 1046.5); // نغمة نجاح ناعمة G5 -> C6
+                playToneNotification(784, 1046.5);
               }
               prevCustomerStatusRef.current = statusKey;
             } else if (mounted) {
               setActiveCustomerBooking(null);
+            }
+          }
+        }
+
+        // فحص طلبات المنيو للزبون
+        const ordersRes = await fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
+        if (ordersRes && ordersRes.ok) {
+          const oData = await ordersRes.json();
+          if (Array.isArray(oData.orders)) {
+            const currentOrder = oData.orders.find((o: CustomerOrder) =>
+              o.status === "PENDING" || o.status === "PREPARING" || o.status === "READY"
+            );
+
+            if (mounted && currentOrder) {
+              setActiveCustomerOrder(currentOrder);
+              const orderStatusKey = `O-${currentOrder.id}-${currentOrder.status}`;
+              if (prevCustomerStatusRef.current && prevCustomerStatusRef.current !== orderStatusKey) {
+                playToneNotification(880, 1174.66); // نغمة لطلبات الطعام
+              }
+              prevCustomerStatusRef.current = orderStatusKey;
+            } else if (mounted) {
+              setActiveCustomerOrder(null);
             }
           }
         }
@@ -210,8 +229,8 @@ export function CustomerShell({
     }
 
     if (user && user.role === "CUSTOMER") {
-      trackCustomerOrdersAndBookings();
-      const interval = setInterval(trackCustomerOrdersAndBookings, 5000);
+      trackCustomerActivity();
+      const interval = setInterval(trackCustomerActivity, 5000);
       return () => {
         mounted = false;
         clearInterval(interval);
@@ -323,7 +342,7 @@ export function CustomerShell({
 
       {/* MAIN */}
       <div className="nz-main">
-        {/* شريط الكاشير والإدارة (حجوزات + طلبات منيو جديدة) */}
+        {/* شريط الكاشير والإدارة */}
         {isStaff && totalStaffPending > 0 && (
           <div className="nz-staff-alert-banner">
             <div className="nz-alert-content">
@@ -366,8 +385,29 @@ export function CustomerShell({
           </div>
         )}
 
-        {/* شريط متابعة حالة الحجز والطلب المباشر للزبون */}
-        {!isStaff && activeCustomerBooking && (
+        {/* شريط متابعة طلب المنيو للزبون */}
+        {!isStaff && activeCustomerOrder && (
+          <div className="nz-customer-tracker-banner">
+            <div className="nz-tracker-info">
+              <span className="nz-tracker-pulse" />
+              <div>
+                <strong>
+                  طلب المنيو #{activeCustomerOrder.orderNumber}:{" "}
+                  {activeCustomerOrder.status === "PENDING" && "بانتظار قبول المطبخ ⏳"}
+                  {activeCustomerOrder.status === "PREPARING" && "جاري تحضير طلبك الآن في المطبخ! 🍳"}
+                  {activeCustomerOrder.status === "READY" && "طلبك جاهز للاستلام أو التوصيل! 🚀"}
+                </strong>
+                <small>تم تحديث حالة طلبك للتو</small>
+              </div>
+            </div>
+            <Link href="/menu" className="nz-tracker-btn">
+              المنيو ←
+            </Link>
+          </div>
+        )}
+
+        {/* شريط متابعة الحجز للزبون */}
+        {!isStaff && activeCustomerBooking && !activeCustomerOrder && (
           <div className="nz-customer-tracker-banner">
             <div className="nz-tracker-info">
               <span className="nz-tracker-pulse" />
@@ -378,11 +418,11 @@ export function CustomerShell({
                   {activeCustomerBooking.status === "CONFIRMED" && "تم تأكيد حجزك وجاري تجهيز جهازك! ✅"}
                   {activeCustomerBooking.status === "ACTIVE" && "جلستك جارية الآن.. نتمنى لك وقتاً ممتعاً! 🎮"}
                 </strong>
-                <small>اضغط للاطلاع على تفاصيل وقت الحجز ورقم الجهاز</small>
+                <small>اضغط للاطلاع على تفاصيل الحجز</small>
               </div>
             </div>
             <Link href="/bookings" className="nz-tracker-btn">
-              عرض الحجز ←
+              حجوزاتي ←
             </Link>
           </div>
         )}
@@ -500,7 +540,6 @@ export function CustomerShell({
       </nav>
 
       <style jsx>{`
-        /* شريط الكاشير */
         .nz-staff-alert-banner {
           margin: 14px 20px 0;
           padding: 12px 18px;
@@ -516,7 +555,6 @@ export function CustomerShell({
           animation: slideDown 0.3s ease;
         }
 
-        /* شريط متابعة حالة حجز الزبون */
         .nz-customer-tracker-banner {
           margin: 14px 20px 0;
           padding: 12px 18px;

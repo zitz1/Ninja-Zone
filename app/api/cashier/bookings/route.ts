@@ -112,16 +112,20 @@ export async function GET(request: NextRequest) {
     const urlDate = request.nextUrl.searchParams.get("date");
     const isPendingOnly = request.nextUrl.searchParams.get("pendingOnly") === "true";
 
-    // إذا طلب الكاشير فحص الإشعارات المعلقة فقط، نجلب كافة الحجوزات المعلقة PENDING أياً كان تاريخها
     let whereClause: Prisma.BookingWhereInput = {};
 
-    if (isPendingOnly || urlDate === "ALL") {
+    if (isPendingOnly) {
       whereClause = { status: BookingStatus.PENDING };
+    } else if (urlDate === "ALL") {
+      whereClause = {};
     } else {
       const date = urlDate || iraqToday();
       const { start, end } = iraqDayRange(date);
+      
+      // جلب حجوزات اليوم المحدد + دمج أي حجز جديد PENDING في أي تاريخ حتى يظهر دائماً في لوحة الكاشير
       whereClause = {
         OR: [
+          { status: BookingStatus.PENDING },
           { startAt: { gte: start, lte: end } },
           { endAt: { gte: start, lte: end } },
           { startAt: { lte: start }, endAt: { gte: end } },
@@ -131,7 +135,11 @@ export async function GET(request: NextRequest) {
 
     const bookings = await prisma.booking.findMany({
       where: whereClause,
-      orderBy: [{ startAt: "asc" }, { createdAt: "asc" }],
+      orderBy: [
+        { status: "asc" }, // إظهار PENDING في البداية دائماً
+        { startAt: "asc" },
+        { createdAt: "asc" },
+      ],
       include: {
         user: { select: { id: true, name: true, phone: true } },
         invoices: true,
