@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "../app/globals.css";
 
 type User = {
@@ -10,6 +10,14 @@ type User = {
   phone: string;
   name: string;
   role: "CUSTOMER" | "CASHIER" | "ADMIN";
+};
+
+type AppNotification = {
+  id: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
 };
 
 const nav = [
@@ -21,6 +29,42 @@ const nav = [
   { href: "/account", label: "حسابي", icon: "♙" },
 ];
 
+// دالة إصدار رنة تنبيه ناعمة ومدمجة
+function playNotificationChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    const now = ctx.currentTime;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(587.33, now); // نغمة D5
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.12); // نغمة A5
+
+    osc2.type = "triangle";
+    osc2.frequency.setValueAtTime(880, now + 0.12);
+    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.25); // نغمة D6
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start(now);
+    osc1.stop(now + 0.25);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.5);
+  } catch {
+    // تجاهل القيود إن وجدت
+  }
+}
+
 export function CustomerShell({
   children,
 }: {
@@ -28,13 +72,15 @@ export function CustomerShell({
 }) {
   const pathname = usePathname();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications] = useState<string[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+  const previousUnreadCount = useRef<number | null>(null);
 
   const active = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
+  // تحميل بيانات المستخدم
   useEffect(() => {
     let mounted = true;
 
@@ -65,6 +111,56 @@ export function CustomerShell({
     };
   }, [pathname]);
 
+  // فحص دوري للإشعارات كل 6 ثوانٍ وتشغيل الصوت
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchNotifications() {
+      if (!user) return;
+      try {
+        const res = await fetch(`/api/notifications?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (mounted && Array.isArray(data.notifications)) {
+          const list: AppNotification[] = data.notifications;
+          const unreadCount = list.filter((n) => !n.read).length;
+
+          // تشغيل الصوت إذا ورد إشعار جديد غير مقروء
+          if (previousUnreadCount.current !== null && unreadCount > previousUnreadCount.current) {
+            playNotificationChime();
+          }
+          previousUnreadCount.current = unreadCount;
+          setNotifications(list);
+        }
+      } catch {
+        // خطأ اتصال مؤقت
+      }
+    }
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 6000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [user]);
+
+  async function handleOpenNotifications() {
+    const nextState = !notificationsOpen;
+    setNotificationsOpen(nextState);
+
+    if (nextState && notifications.some((n) => !n.read)) {
+      try {
+        await fetch("/api/notifications", { method: "PATCH" });
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        previousUnreadCount.current = 0;
+      } catch {
+        // تجاهل
+      }
+    }
+  }
+
   async function logout() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -74,6 +170,8 @@ export function CustomerShell({
     }
   }
 
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
   return (
     <div className="nz-app" dir="rtl">
       <div className="nz-ambient nz-ambient-a" />
@@ -82,7 +180,6 @@ export function CustomerShell({
 
       {/* SIDEBAR */}
       <aside className="nz-sidebar">
-        {/* اللوجو الأصلي */}
         <Link
           href="/"
           className="nz-sidebar-brand"
@@ -168,10 +265,10 @@ export function CustomerShell({
               ☰
             </button>
 
-            {/* الإشعارات النظيفة */}
+            {/* الإشعارات الفعالة مع الصوت */}
             <div className="nz-notification-wrap" style={{ position: "relative" }}>
               <button
-                onClick={() => setNotificationsOpen((v) => !v)}
+                onClick={handleOpenNotifications}
                 aria-label="الإشعارات"
                 aria-expanded={notificationsOpen}
                 style={{
@@ -182,15 +279,16 @@ export function CustomerShell({
                   width: "40px",
                   height: "40px",
                   borderRadius: "50%",
-                  background: "transparent",
+                  background: notificationsOpen ? "rgba(139, 92, 246, 0.2)" : "transparent",
                   border: "none",
                   color: "#dce0e7",
                   cursor: "pointer",
                   fontSize: "20px",
+                  transition: "all 0.2s ease",
                 }}
               >
                 🔔
-                {notifications.length > 0 && (
+                {unreadCount > 0 && (
                   <b
                     style={{
                       position: "absolute",
@@ -200,16 +298,18 @@ export function CustomerShell({
                       color: "#fff",
                       fontSize: "10px",
                       fontWeight: "900",
-                      width: "16px",
-                      height: "16px",
+                      minWidth: "18px",
+                      height: "18px",
+                      padding: "0 4px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      borderRadius: "50%",
+                      borderRadius: "999px",
                       border: "2px solid #090a0e",
+                      animation: "pulse 1.5s infinite",
                     }}
                   >
-                    {notifications.length}
+                    {unreadCount}
                   </b>
                 )}
               </button>
@@ -221,42 +321,72 @@ export function CustomerShell({
                     position: "absolute",
                     top: "50px",
                     left: "0",
-                    width: "280px",
+                    width: "310px",
+                    maxHeight: "420px",
                     background: "#12151b",
                     border: "1px solid #1e232b",
-                    borderRadius: "12px",
+                    borderRadius: "14px",
                     padding: "16px",
                     zIndex: 99999,
-                    boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
                     color: "#fff",
                     textAlign: "right",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "10px",
                   }}
                 >
-                  <strong
+                  <div
                     style={{
-                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
                       borderBottom: "1px solid #1e232b",
-                      paddingBottom: "8px",
-                      color: "#fff",
+                      paddingBottom: "10px",
+                      marginBottom: "10px",
                     }}
                   >
-                    الإشعارات
-                  </strong>
+                    <strong style={{ fontSize: "14px", color: "#fff" }}>
+                      الإشعارات
+                    </strong>
+                    {unreadCount > 0 && (
+                      <span style={{ fontSize: "11px", color: "#a78bfa" }}>
+                        {unreadCount} غير مقروء
+                      </span>
+                    )}
+                  </div>
                   
-                  {notifications.length === 0 ? (
-                    <p style={{ margin: "10px 0", color: "#8d95a5", fontSize: "13px", textAlign: "center" }}>
-                      لا توجد إشعارات جديدة حالياً
-                    </p>
-                  ) : (
-                    notifications.map((n, i) => (
-                      <p key={i} style={{ margin: "5px 0", color: "#dce0e7", fontSize: "12px" }}>
-                        {n}
+                  <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "8px", maxHeight: "280px" }}>
+                    {notifications.length === 0 ? (
+                      <p style={{ margin: "25px 0", color: "#8d95a5", fontSize: "13px", textAlign: "center" }}>
+                        لا توجد إشعارات حالياً
                       </p>
-                    ))
-                  )}
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "10px",
+                            background: n.read ? "rgba(255,255,255,0.03)" : "rgba(139, 92, 246, 0.12)",
+                            border: n.read ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(139, 92, 246, 0.3)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "3px",
+                          }}
+                        >
+                          <strong style={{ fontSize: "13px", color: n.read ? "#dce0e7" : "#c4b5fd" }}>
+                            {n.title}
+                          </strong>
+                          <p style={{ margin: 0, fontSize: "12px", color: "#9ca3af", lineHeight: 1.4 }}>
+                            {n.message}
+                          </p>
+                          <small style={{ fontSize: "10px", color: "#6b7280", marginTop: "4px" }}>
+                            {new Date(n.createdAt).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}
+                          </small>
+                        </div>
+                      ))
+                    )}
+                  </div>
 
                   <button
                     onClick={() => setNotificationsOpen(false)}
@@ -270,7 +400,7 @@ export function CustomerShell({
                       cursor: "pointer",
                       fontSize: "12px",
                       fontWeight: "600",
-                      marginTop: "4px",
+                      marginTop: "12px",
                     }}
                   >
                     إغلاق
