@@ -153,20 +153,31 @@ export function normalizeBookingItems(
       );
     }
 
-    const startAt = assertDate(
+    let startAt = assertDate(
       item.startAt,
       "وقت بداية الحجز",
     );
+
+    const now = new Date();
+
+    // إذا كان الوقت المختار يقع بين 00:00 و 03:00 فجراً وتاريخه أظهر أنه بالماضي
+    // فهذا يعني أنه سهرة الليلة (اليوم التالي في التقويم بعد منتصف الليل)
+    const shiftedStart = new Date(startAt.getTime() + 3 * 60 * 60_000);
+    const iraqHour = shiftedStart.getUTCHours();
+    if (iraqHour < BUSINESS_OPEN_HOUR && startAt < now) {
+      const candidate = new Date(startAt.getTime() + 24 * 60 * 60_000);
+      if (candidate.getTime() - now.getTime() > -15 * 60_000) {
+        startAt = candidate;
+      }
+    }
 
     const endAt = new Date(
       startAt.getTime() +
         durationMinutes * 60_000,
     );
 
-    const now = new Date();
-
     const thresholdNow = new Date(
-      now.getTime() - 10 * 60_000,
+      now.getTime() - 15 * 60_000,
     );
 
     const latestAllowed = new Date(
@@ -281,34 +292,22 @@ function isCanonicalResourceCode(
 
   switch (type) {
     case ResourceType.BILLIARD:
-      return /^BILLIARD-(0[1-2])$/.test(
-        normalized,
-      );
+      return /^BILLIARD-(0?[1-2])$/.test(normalized);
 
     case ResourceType.PC_NORMAL:
-      return /^PC-NORMAL-(0[1-8])$/.test(
-        normalized,
-      );
+      return /^PC-NORMAL-(0?[1-8])$/.test(normalized);
 
     case ResourceType.PC_MASTER:
-      return /^PC-MASTER-(0[1-8])$/.test(
-        normalized,
-      );
+      return /^PC-MASTER-(0?[1-8])$/.test(normalized);
 
     case ResourceType.PS5:
-      return /^PS5-(0[1-9]|10)$/.test(
-        normalized,
-      );
+      return /^PS5-(0?[1-9]|10)$/.test(normalized);
 
     case ResourceType.CINEMA:
-      return /^CINEMA-(0[1-4])$/.test(
-        normalized,
-      );
+      return /^CINEMA-(0?[1-4])$/.test(normalized);
 
     case ResourceType.TABLE:
-      return /^TABLE-(0[1-8])$/.test(
-        normalized,
-      );
+      return /^TABLE-(0?[1-8])$/.test(normalized);
 
     default:
       return true;
@@ -512,13 +511,11 @@ async function allocateResources(
 async function generateBookingNumber(
   tx: Prisma.TransactionClient,
 ) {
-  // حساب بداية اليوم الحالي بتوقيت العراق
   const now = new Date();
   const startOfToday = new Date(now.getTime() + 3 * 60 * 60_000);
   startOfToday.setUTCHours(0, 0, 0, 0);
   const startOfTodayUtc = new Date(startOfToday.getTime() - 3 * 60 * 60_000);
 
-  // حساب عدد حجوزات اليوم الحالي فقط ليبدأ كل يوم من #1
   const todayCount = await tx.booking.count({
     where: {
       createdAt: {
@@ -787,14 +784,12 @@ export async function createPendingBooking(
 
 export async function getAvailability(
   resourceType: ResourceType,
-  startAt: Date,
-  endAt: Date,
+  startAtInput: Date,
+  endAtInput: Date,
 ) {
   if (
-    !(startAt instanceof Date) ||
-    Number.isNaN(
-      startAt.getTime(),
-    )
+    !(startAtInput instanceof Date) ||
+    Number.isNaN(startAtInput.getTime())
   ) {
     throw new BookingValidationError(
       "وقت بداية الحجز غير صالح.",
@@ -802,14 +797,29 @@ export async function getAvailability(
   }
 
   if (
-    !(endAt instanceof Date) ||
-    Number.isNaN(
-      endAt.getTime(),
-    )
+    !(endAtInput instanceof Date) ||
+    Number.isNaN(endAtInput.getTime())
   ) {
     throw new BookingValidationError(
       "وقت نهاية الحجز غير صالح.",
     );
+  }
+
+  let startAt = startAtInput;
+  let endAt = endAtInput;
+
+  const now = new Date();
+
+  // معالجة ساعات الفجر (00:00 إلى 03:00) إذا كانت تشير لسهرة اليوم
+  const shiftedStart = new Date(startAt.getTime() + 3 * 60 * 60_000);
+  const iraqHour = shiftedStart.getUTCHours();
+  if (iraqHour < BUSINESS_OPEN_HOUR && startAt < now) {
+    const candidateStart = new Date(startAt.getTime() + 24 * 60 * 60_000);
+    const candidateEnd = new Date(endAt.getTime() + 24 * 60 * 60_000);
+    if (candidateStart.getTime() - now.getTime() > -15 * 60_000) {
+      startAt = candidateStart;
+      endAt = candidateEnd;
+    }
   }
 
   if (endAt <= startAt) {
@@ -818,7 +828,8 @@ export async function getAvailability(
     );
   }
 
-  if (startAt <= new Date()) {
+  const thresholdNow = new Date(now.getTime() - 15 * 60_000);
+  if (startAt <= thresholdNow) {
     throw new BookingValidationError(
       "وقت بداية الحجز يجب أن يكون في المستقبل.",
     );
@@ -1031,10 +1042,23 @@ export function makeIraqDate(
     );
   }
 
-  return assertDate(
+  let parsed = assertDate(
     `${date}T${time}:00${IRAQ_OFFSET}`,
     "التاريخ والوقت",
   );
+
+  const [hours] = time.split(":").map(Number);
+  const now = new Date();
+
+  // إذا اختار وقت الفجر (من 00:00 إلى 03:00) وكان التاريخ قديماً بالماضي
+  // فهو يقصد سهرة الليلة (اليوم التالي في التقويم بعد منتصف الليل)
+  if (hours < BUSINESS_OPEN_HOUR) {
+    if (parsed.getTime() <= now.getTime() - 10 * 60_000) {
+      parsed = new Date(parsed.getTime() + 24 * 60 * 60_000);
+    }
+  }
+
+  return parsed;
 }
 
 /* =========================================================
