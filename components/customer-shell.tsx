@@ -12,6 +12,18 @@ type User = {
   role: "CUSTOMER" | "CASHIER" | "ADMIN";
 };
 
+type CustomerOrder = {
+  id: string;
+  orderNumber: string;
+  status: "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED";
+};
+
+type CustomerBooking = {
+  id: string;
+  bookingNumber?: string;
+  status: "PENDING" | "CONFIRMED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+};
+
 const nav = [
   { href: "/", label: "الرئيسية", icon: "⌂" },
   { href: "/sections", label: "الأقسام", icon: "▦" },
@@ -21,7 +33,7 @@ const nav = [
   { href: "/account", label: "حسابي", icon: "♙" },
 ];
 
-function triggerBeep() {
+function playToneNotification(freq1 = 659.25, freq2 = 880) {
   try {
     const AudioCtx =
       window.AudioContext ||
@@ -31,12 +43,12 @@ function triggerBeep() {
     const ctx = new AudioCtx();
     const now = ctx.currentTime;
 
-    const playTone = (freq: number, start: number, duration: number) => {
+    const play = (freq: number, start: number, duration: number) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "triangle";
       osc.frequency.setValueAtTime(freq, start);
-      gain.gain.setValueAtTime(0.3, start);
+      gain.gain.setValueAtTime(0.25, start);
       gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -44,8 +56,8 @@ function triggerBeep() {
       osc.stop(start + duration);
     };
 
-    playTone(659.25, now, 0.2); // E5
-    playTone(880, now + 0.15, 0.35); // A5
+    play(freq1, now, 0.2);
+    play(freq2, now + 0.15, 0.35);
   } catch {
     //
   }
@@ -60,14 +72,21 @@ export function CustomerShell({
   const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
+  // إحصائيات الكاشير
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [soundUnlocked, setSoundUnlocked] = useState(false);
-  const prevTotalRef = useRef<number | null>(null);
+  const prevCashierTotalRef = useRef<number | null>(null);
+
+  // تتبع الزبون لطلباته وحجوزاته
+  const [activeCustomerOrder, setActiveCustomerOrder] = useState<CustomerOrder | null>(null);
+  const [activeCustomerBooking, setActiveCustomerBooking] = useState<CustomerBooking | null>(null);
+  const prevCustomerStatusRef = useRef<string>("");
 
   const active = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
+  // 1. تحميل المستخدم
   useEffect(() => {
     let mounted = true;
 
@@ -93,11 +112,11 @@ export function CustomerShell({
     };
   }, [pathname]);
 
-  // فحص الطلبات والحجوزات المعلقة معاً كل 4 ثوانٍ للكاشير والمدير
+  // 2. مراقبة للكاشير (فحص الطلبات والحجوزات المعلقة معاً)
   useEffect(() => {
     let mounted = true;
 
-    async function checkPendingAll() {
+    async function checkCashierPending() {
       if (!user || (user.role !== "CASHIER" && user.role !== "ADMIN")) {
         return;
       }
@@ -105,7 +124,8 @@ export function CustomerShell({
       try {
         const [ordersRes, bookingsRes] = await Promise.all([
           fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
-          fetch(`/api/cashier/bookings?t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
+          // فحص الحجوزات مع استعلام يشمل كل الأيام المعلقة
+          fetch(`/api/cashier/bookings?date=ALL&t=${Date.now()}`, { cache: "no-store" }).catch(() => null),
         ]);
 
         let ordersCount = 0;
@@ -127,10 +147,10 @@ export function CustomerShell({
 
         const totalPending = ordersCount + bookingsCount;
 
-        if (prevTotalRef.current !== null && totalPending > prevTotalRef.current) {
-          triggerBeep();
+        if (prevCashierTotalRef.current !== null && totalPending > prevCashierTotalRef.current) {
+          playToneNotification(659.25, 880);
         }
-        prevTotalRef.current = totalPending;
+        prevCashierTotalRef.current = totalPending;
 
         if (mounted) {
           setPendingOrdersCount(ordersCount);
@@ -142,8 +162,56 @@ export function CustomerShell({
     }
 
     if (user && (user.role === "CASHIER" || user.role === "ADMIN")) {
-      checkPendingAll();
-      const interval = setInterval(checkPendingAll, 4000);
+      checkCashierPending();
+      const interval = setInterval(checkCashierPending, 4000);
+      return () => {
+        mounted = false;
+        clearInterval(interval);
+      };
+    }
+  }, [user]);
+
+  // 3. مراقبة للزبون (فحص حالة طلبه وحجزه الحالي وتنبيهه فوراً عند التغيير)
+  useEffect(() => {
+    let mounted = true;
+
+    async function trackCustomerOrdersAndBookings() {
+      if (!user || user.role === "CASHIER" || user.role === "ADMIN") {
+        return;
+      }
+
+      try {
+        const bookingsRes = await fetch(`/api/my-bookings?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
+        if (bookingsRes && bookingsRes.ok) {
+          const bData = await bookingsRes.json();
+          if (Array.isArray(bData.bookings)) {
+            // جلب أحدث حجز جاري أو بانتظار التأكيد
+            const currentBooking = bData.bookings.find((b: CustomerBooking) =>
+              b.status === "PENDING" || b.status === "CONFIRMED" || b.status === "ACTIVE"
+            );
+
+            if (mounted && currentBooking) {
+              setActiveCustomerBooking(currentBooking);
+
+              // إذا تغيرت الحالة (مثلاً من PENDING إلى CONFIRMED)، نطلق تنبيهاً للزبون
+              const statusKey = `B-${currentBooking.id}-${currentBooking.status}`;
+              if (prevCustomerStatusRef.current && prevCustomerStatusRef.current !== statusKey) {
+                playToneNotification(784, 1046.5); // نغمة نجاح ناعمة G5 -> C6
+              }
+              prevCustomerStatusRef.current = statusKey;
+            } else if (mounted) {
+              setActiveCustomerBooking(null);
+            }
+          }
+        }
+      } catch {
+        //
+      }
+    }
+
+    if (user && user.role === "CUSTOMER") {
+      trackCustomerOrdersAndBookings();
+      const interval = setInterval(trackCustomerOrdersAndBookings, 5000);
       return () => {
         mounted = false;
         clearInterval(interval);
@@ -153,7 +221,7 @@ export function CustomerShell({
 
   function enableSound() {
     setSoundUnlocked(true);
-    triggerBeep();
+    playToneNotification();
   }
 
   async function logout() {
@@ -166,7 +234,7 @@ export function CustomerShell({
   }
 
   const isStaff = user?.role === "CASHIER" || user?.role === "ADMIN";
-  const totalPending = pendingOrdersCount + pendingBookingsCount;
+  const totalStaffPending = pendingOrdersCount + pendingBookingsCount;
 
   return (
     <div className="nz-app" dir="rtl">
@@ -255,18 +323,18 @@ export function CustomerShell({
 
       {/* MAIN */}
       <div className="nz-main">
-        {/* شريط الإشعار البارز والشامل للطلبات والحجوزات */}
-        {isStaff && totalPending > 0 && (
+        {/* شريط الكاشير والإدارة (حجوزات + طلبات منيو جديدة) */}
+        {isStaff && totalStaffPending > 0 && (
           <div className="nz-staff-alert-banner">
             <div className="nz-alert-content">
               <span className="nz-alert-bell">🔔</span>
               <div>
                 <strong>
-                  تنبيه الكاشير: يوجد {totalPending} طلبات وحجوزات جديدة بانتظار التأكيد!
+                  تنبيه الكاشير: يوجد {totalStaffPending} طلبات وحجوزات جديدة بانتظار التأكيد!
                 </strong>
                 <p>
-                  {pendingOrdersCount > 0 && `(${pendingOrdersCount} طلب منيو) `}
-                  {pendingBookingsCount > 0 && `(${pendingBookingsCount} حجز جهاز جديد)`}
+                  {pendingBookingsCount > 0 && `(حجوزات أجهزة: ${pendingBookingsCount}) `}
+                  {pendingOrdersCount > 0 && `(طلبات منيو: ${pendingOrdersCount})`}
                 </p>
               </div>
             </div>
@@ -295,6 +363,27 @@ export function CustomerShell({
                 </Link>
               )}
             </div>
+          </div>
+        )}
+
+        {/* شريط متابعة حالة الحجز والطلب المباشر للزبون */}
+        {!isStaff && activeCustomerBooking && (
+          <div className="nz-customer-tracker-banner">
+            <div className="nz-tracker-info">
+              <span className="nz-tracker-pulse" />
+              <div>
+                <strong>
+                  متابعة الحجز {activeCustomerBooking.bookingNumber || ""}:{" "}
+                  {activeCustomerBooking.status === "PENDING" && "بانتظار تأكيد الكاشير ⏳"}
+                  {activeCustomerBooking.status === "CONFIRMED" && "تم تأكيد حجزك وجاري تجهيز جهازك! ✅"}
+                  {activeCustomerBooking.status === "ACTIVE" && "جلستك جارية الآن.. نتمنى لك وقتاً ممتعاً! 🎮"}
+                </strong>
+                <small>اضغط للاطلاع على تفاصيل وقت الحجز ورقم الجهاز</small>
+              </div>
+            </div>
+            <Link href="/bookings" className="nz-tracker-btn">
+              عرض الحجز ←
+            </Link>
           </div>
         )}
 
@@ -411,6 +500,7 @@ export function CustomerShell({
       </nav>
 
       <style jsx>{`
+        /* شريط الكاشير */
         .nz-staff-alert-banner {
           margin: 14px 20px 0;
           padding: 12px 18px;
@@ -424,6 +514,70 @@ export function CustomerShell({
           gap: 14px;
           z-index: 100;
           animation: slideDown 0.3s ease;
+        }
+
+        /* شريط متابعة حالة حجز الزبون */
+        .nz-customer-tracker-banner {
+          margin: 14px 20px 0;
+          padding: 12px 18px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(30, 27, 75, 0.4));
+          border: 1px solid rgba(139, 92, 246, 0.35);
+          box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          z-index: 100;
+          animation: slideDown 0.3s ease;
+        }
+
+        .nz-tracker-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .nz-tracker-pulse {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #a78bfa;
+          box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.25);
+          animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.4); }
+          70% { box-shadow: 0 0 0 8px rgba(167, 139, 250, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0); }
+        }
+
+        .nz-tracker-info strong {
+          color: #f5f3ff;
+          font-size: 13px;
+          display: block;
+        }
+
+        .nz-tracker-info small {
+          color: #c4b5fd;
+          font-size: 11px;
+        }
+
+        .nz-tracker-btn {
+          padding: 7px 15px;
+          border-radius: 8px;
+          background: #8b5cf6;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 800;
+          text-decoration: none;
+          white-space: nowrap;
+          transition: background 0.2s ease;
+        }
+
+        .nz-tracker-btn:hover {
+          background: #7c3aed;
         }
 
         @keyframes slideDown {
@@ -513,7 +667,8 @@ export function CustomerShell({
         }
 
         @media (max-width: 700px) {
-          .nz-staff-alert-banner {
+          .nz-staff-alert-banner,
+          .nz-customer-tracker-banner {
             flex-direction: column;
             align-items: flex-start;
             margin: 10px 12px 0;
@@ -526,8 +681,9 @@ export function CustomerShell({
             justify-content: flex-end;
           }
 
-          .nz-goto-btn {
-            flex: 1;
+          .nz-goto-btn,
+          .nz-tracker-btn {
+            width: 100%;
             text-align: center;
           }
         }
