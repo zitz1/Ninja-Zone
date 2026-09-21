@@ -503,7 +503,7 @@ async function allocateResources(
 }
 
 /* =========================================================
-   BOOKING NUMBER (SEQUENTIAL #1, #2, #3...)
+   BOOKING NUMBER (SEQUENTIAL & CONCURRENCY SAFE)
 ========================================================= */
 
 async function generateBookingNumber(
@@ -522,8 +522,21 @@ async function generateBookingNumber(
     },
   });
 
-  const seq = countToday + 1;
-  return `#${seq}`;
+  let seq = countToday + 1;
+  let bookingNumber = `#${seq}`;
+
+  // منع حدوث تضارب في أرقام الحجوزات عند ازدحام الطلبات
+  while (true) {
+    const existing = await tx.booking.findUnique({
+      where: { bookingNumber },
+      select: { id: true },
+    });
+    if (!existing) break;
+    seq++;
+    bookingNumber = `#${seq}`;
+  }
+
+  return bookingNumber;
 }
 
 /* =========================================================
