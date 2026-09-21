@@ -79,41 +79,55 @@ export default function BookingsPage() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [openBookingId, setOpenBookingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  async function loadBookings() {
+    try {
+      const response = await fetch("/api/my-bookings", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError("يجب تسجيل الدخول لعرض حجوزاتك.");
+          return;
+        }
+        throw new Error(data.error || "تعذر تحميل الحجوزات.");
+      }
+
+      setBookings(Array.isArray(data.bookings) ? data.bookings : []);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر تحميل الحجوزات.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadBookings() {
-      try {
-        const response = await fetch("/api/my-bookings", { cache: "no-store" });
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            if (mounted) setError("يجب تسجيل الدخول لعرض حجوزاتك.");
-            return;
-          }
-          throw new Error(data.error || "تعذر تحميل الحجوزات.");
-        }
-
-        if (mounted) {
-          setBookings(Array.isArray(data.bookings) ? data.bookings : []);
-          setError("");
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : "تعذر تحميل الحجوزات.");
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
     loadBookings();
-    return () => {
-      mounted = false;
-    };
   }, []);
+
+  async function cancelBooking(bookingId: string) {
+    if (!confirm("هل أنت متأكد من رغبتك في إلغاء هذا الحجز؟")) return;
+
+    setCancellingId(bookingId);
+    try {
+      const res = await fetch(`/api/my-bookings/${bookingId}/cancel`, {
+        method: "PATCH",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "تعذر إلغاء الحجز.");
+
+      // تحديث القائمة محلياً
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, status: "CANCELLED" } : b))
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "حدث خطأ أثناء الإلغاء.");
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   const filtered = bookings.filter((b) => {
     if (filter === "ALL") return true;
@@ -137,7 +151,7 @@ export default function BookingsPage() {
           <div>
             <span className="nz-label">MY BOOKINGS</span>
             <h1>حجوزاتي</h1>
-            <p>اضغط على أي حجز لعرض أو إخفاء التفاصيل الكاملة.</p>
+            <p>اضغط على أي حجز لعرض التفاصيل أو إلغائه.</p>
           </div>
         </header>
 
@@ -193,7 +207,6 @@ export default function BookingsPage() {
 
                   return (
                     <article className={`nz-booking-card ${isOpen ? "open" : ""}`} key={booking.id}>
-                      {/* الشريط الرئيسي القابل للضغط للانسدال والإغلاق */}
                       <button
                         type="button"
                         className="nz-booking-summary-btn"
@@ -234,7 +247,6 @@ export default function BookingsPage() {
                         </div>
                       </button>
 
-                      {/* المحتوى المنسدل الذي يظهر ويختفي بحرية */}
                       {isOpen && (
                         <div className="nz-booking-dropdown-content">
                           <div className="nz-booking-dates">
@@ -274,15 +286,38 @@ export default function BookingsPage() {
 
                           {booking.customerNote && (
                             <div className="nz-booking-note">
-                              <span>ملاحظتك للكاشير</span>
+                              <span>ملاحظتك</span>
                               <p>{booking.customerNote}</p>
                             </div>
                           )}
 
                           <div className="nz-booking-total">
-                            <span>المبلغ المطلوب</span>
+                            <span>المبلغ الإجمالي</span>
                             <strong>{money(booking.totalAmount)}</strong>
                           </div>
+
+                          {/* زر إلغاء الحجز للعميل إذا كان الحجز بانتظار التأكيد أو مؤكداً */}
+                          {(booking.status === "PENDING" || booking.status === "CONFIRMED") && (
+                            <div style={{ marginTop: "14px", textAlign: "left" }}>
+                              <button
+                                type="button"
+                                disabled={cancellingId === booking.id}
+                                onClick={() => cancelBooking(booking.id)}
+                                style={{
+                                  padding: "8px 16px",
+                                  borderRadius: "10px",
+                                  border: "1px solid rgba(255, 77, 103, 0.3)",
+                                  background: "rgba(255, 77, 103, 0.08)",
+                                  color: "#ff4d67",
+                                  fontSize: "11px",
+                                  fontWeight: 900,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {cancellingId === booking.id ? "جاري الإلغاء..." : "إلغاء هذا الحجز ✕"}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </article>
@@ -307,7 +342,6 @@ export default function BookingsPage() {
           margin: 0;
           font-size: clamp(28px, 4vw, 40px);
           font-weight: 950;
-          letter-spacing: -0.04em;
         }
 
         .nz-page-titlebar p {
@@ -373,7 +407,6 @@ export default function BookingsPage() {
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
         }
 
-        /* زر الشريط الرئيسي للانسدال */
         .nz-booking-summary-btn {
           width: 100%;
           padding: 16px 20px;
@@ -479,17 +512,10 @@ export default function BookingsPage() {
           color: #c4b5fd;
         }
 
-        /* المحتوى المنسدل */
         .nz-booking-dropdown-content {
           padding: 16px 20px 20px;
           border-top: 1px solid #1c2028;
           background: #0d0f14;
-          animation: expandAnim 0.2s ease-out;
-        }
-
-        @keyframes expandAnim {
-          from { opacity: 0; transform: translateY(-6px); }
-          to { opacity: 1; transform: translateY(0); }
         }
 
         .nz-booking-dates {
@@ -670,14 +696,6 @@ export default function BookingsPage() {
 
           .nz-booking-dates {
             grid-template-columns: 1fr;
-          }
-
-          .nz-booking-item {
-            flex-wrap: wrap;
-          }
-
-          .nz-booking-item-time {
-            text-align: right;
           }
         }
       `}</style>
