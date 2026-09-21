@@ -525,7 +525,6 @@ async function generateBookingNumber(
   let seq = countToday + 1;
   let bookingNumber = `#${seq}`;
 
-  // منع حدوث تضارب في أرقام الحجوزات عند ازدحام الطلبات
   while (true) {
     const existing = await tx.booking.findUnique({
       where: { bookingNumber },
@@ -774,10 +773,10 @@ export async function createPendingBooking(
     } catch (error) {
       lastError = error;
 
+      // 🔴 التعديل الهام هنا (إضافة P2002 لإعادة محاولة إنشاء الحجز عند التضارب)
       if (
-        error instanceof
-          Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2034"
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === "P2034" || error.code === "P2002")
       ) {
         continue;
       }
