@@ -33,7 +33,8 @@ const nav = [
   { href: "/account", label: "حسابي", icon: "♙" },
 ];
 
-function playToneNotification(freq1 = 659.25, freq2 = 880) {
+// دالة رنين قوية ومتطابقة تماماً للمنيو والحجوزات
+function playToneNotification(freq1 = 784, freq2 = 1046.5) {
   try {
     const AudioCtx =
       window.AudioContext ||
@@ -46,9 +47,9 @@ function playToneNotification(freq1 = 659.25, freq2 = 880) {
     const play = (freq: number, start: number, duration: number) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = "triangle";
+      osc.type = "sine";
       osc.frequency.setValueAtTime(freq, start);
-      gain.gain.setValueAtTime(0.25, start);
+      gain.gain.setValueAtTime(0.35, start);
       gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -56,8 +57,8 @@ function playToneNotification(freq1 = 659.25, freq2 = 880) {
       osc.stop(start + duration);
     };
 
-    play(freq1, now, 0.2);
-    play(freq2, now + 0.15, 0.35);
+    play(freq1, now, 0.25);
+    play(freq2, now + 0.2, 0.4);
   } catch {
     //
   }
@@ -78,7 +79,7 @@ export function CustomerShell({
   const [soundUnlocked, setSoundUnlocked] = useState(false);
   const prevCashierTotalRef = useRef<number | null>(null);
 
-  // تتبع الزبون لطلبات المنيو وحجوزات الأجهزة
+  // تتبع الزبون
   const [activeCustomerOrder, setActiveCustomerOrder] = useState<CustomerOrder | null>(null);
   const [activeCustomerBooking, setActiveCustomerBooking] = useState<CustomerBooking | null>(null);
   const prevCustomerStatusRef = useRef<string>("");
@@ -86,7 +87,6 @@ export function CustomerShell({
   const active = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  // 1. تحميل المستخدم
   useEffect(() => {
     let mounted = true;
 
@@ -112,7 +112,7 @@ export function CustomerShell({
     };
   }, [pathname]);
 
-  // 2. مراقبة للكاشير (فحص الطلبات والحجوزات المعلقة معاً)
+  // مراقبة الكاشير الموحدة للطلبات والحجوزات مع تفعيل الصوت بقوة
   useEffect(() => {
     let mounted = true;
 
@@ -147,7 +147,7 @@ export function CustomerShell({
         const totalPending = ordersCount + bookingsCount;
 
         if (prevCashierTotalRef.current !== null && totalPending > prevCashierTotalRef.current) {
-          playToneNotification(659.25, 880);
+          playToneNotification(784, 1046.5);
         }
         prevCashierTotalRef.current = totalPending;
 
@@ -162,7 +162,7 @@ export function CustomerShell({
 
     if (user && (user.role === "CASHIER" || user.role === "ADMIN")) {
       checkCashierPending();
-      const interval = setInterval(checkCashierPending, 4000);
+      const interval = setInterval(checkCashierPending, 3000);
       return () => {
         mounted = false;
         clearInterval(interval);
@@ -170,7 +170,7 @@ export function CustomerShell({
     }
   }, [user]);
 
-  // 3. مراقبة للزبون (تتبع طلبات المنيو وحجوزات الأجهزة وتنبيهه عند التغيير)
+  // مراقبة الزبون
   useEffect(() => {
     let mounted = true;
 
@@ -180,7 +180,6 @@ export function CustomerShell({
       }
 
       try {
-        // فحص حجوزات الأجهزة للزبون
         const bookingsRes = await fetch(`/api/my-bookings?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
         if (bookingsRes && bookingsRes.ok) {
           const bData = await bookingsRes.json();
@@ -193,7 +192,7 @@ export function CustomerShell({
               setActiveCustomerBooking(currentBooking);
               const statusKey = `B-${currentBooking.id}-${currentBooking.status}`;
               if (prevCustomerStatusRef.current && prevCustomerStatusRef.current !== statusKey) {
-                playToneNotification(784, 1046.5);
+                playToneNotification(880, 1318.5);
               }
               prevCustomerStatusRef.current = statusKey;
             } else if (mounted) {
@@ -202,7 +201,6 @@ export function CustomerShell({
           }
         }
 
-        // فحص طلبات المنيو للزبون
         const ordersRes = await fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
         if (ordersRes && ordersRes.ok) {
           const oData = await ordersRes.json();
@@ -215,7 +213,7 @@ export function CustomerShell({
               setActiveCustomerOrder(currentOrder);
               const orderStatusKey = `O-${currentOrder.id}-${currentOrder.status}`;
               if (prevCustomerStatusRef.current && prevCustomerStatusRef.current !== orderStatusKey) {
-                playToneNotification(880, 1174.66); // نغمة لطلبات الطعام
+                playToneNotification(880, 1174.66);
               }
               prevCustomerStatusRef.current = orderStatusKey;
             } else if (mounted) {
@@ -230,7 +228,7 @@ export function CustomerShell({
 
     if (user && user.role === "CUSTOMER") {
       trackCustomerActivity();
-      const interval = setInterval(trackCustomerActivity, 5000);
+      const interval = setInterval(trackCustomerActivity, 4000);
       return () => {
         mounted = false;
         clearInterval(interval);
@@ -342,7 +340,7 @@ export function CustomerShell({
 
       {/* MAIN */}
       <div className="nz-main">
-        {/* شريط الكاشير والإدارة */}
+        {/* شريط الكاشير */}
         {isStaff && totalStaffPending > 0 && (
           <div className="nz-staff-alert-banner">
             <div className="nz-alert-content">
@@ -385,7 +383,7 @@ export function CustomerShell({
           </div>
         )}
 
-        {/* شريط متابعة طلب المنيو للزبون */}
+        {/* شريط الزبون للمنيو */}
         {!isStaff && activeCustomerOrder && (
           <div className="nz-customer-tracker-banner">
             <div className="nz-tracker-info">
@@ -406,7 +404,7 @@ export function CustomerShell({
           </div>
         )}
 
-        {/* شريط متابعة الحجز للزبون */}
+        {/* شريط الزبون للحجز */}
         {!isStaff && activeCustomerBooking && !activeCustomerOrder && (
           <div className="nz-customer-tracker-banner">
             <div className="nz-tracker-info">
@@ -443,13 +441,7 @@ export function CustomerShell({
             {loadingUser ? (
               <div className="nz-account-top">جاري التحميل...</div>
             ) : user ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Link href="/account" className="nz-account-top">
                   <span>♙</span>
                   <span>{user.name}</span>
@@ -459,12 +451,7 @@ export function CustomerShell({
                   <Link
                     href="/cashier"
                     className="nz-account-top"
-                    style={{
-                      background: "#3b82f6",
-                      color: "#fff",
-                      border: "none",
-                      fontWeight: 800,
-                    }}
+                    style={{ background: "#3b82f6", color: "#fff", border: "none", fontWeight: 800 }}
                   >
                     لوحة الكاشير
                   </Link>
@@ -474,12 +461,7 @@ export function CustomerShell({
                   <Link
                     href="/admin"
                     className="nz-account-top"
-                    style={{
-                      background: "#8d69f2",
-                      color: "#fff",
-                      border: "none",
-                      fontWeight: 800,
-                    }}
+                    style={{ background: "#8d69f2", color: "#fff", border: "none", fontWeight: 800 }}
                   >
                     لوحة الأدمن
                   </Link>
@@ -489,12 +471,7 @@ export function CustomerShell({
                   type="button"
                   onClick={logout}
                   className="nz-account-top"
-                  style={{
-                    border: 0,
-                    cursor: "pointer",
-                    background: "transparent",
-                    color: "#ff5c5c",
-                  }}
+                  style={{ border: 0, cursor: "pointer", background: "transparent", color: "#ff5c5c" }}
                 >
                   خروج
                 </button>
@@ -523,18 +500,11 @@ export function CustomerShell({
         </footer>
       </div>
 
-      {/* MOBILE NAV */}
       <nav className="nz-bottom-nav" aria-label="تنقل الهاتف">
         {nav.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={active(item.href) ? "active" : ""}
-          >
+          <Link key={item.href} href={item.href} className={active(item.href) ? "active" : ""}>
             <span>{item.icon}</span>
-            <small>
-              {item.label === "الدعم والمساعدة" ? "الدعم" : item.label}
-            </small>
+            <small>{item.label === "الدعم والمساعدة" ? "الدعم" : item.label}</small>
           </Link>
         ))}
       </nav>

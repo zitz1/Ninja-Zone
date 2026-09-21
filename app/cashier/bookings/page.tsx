@@ -251,7 +251,7 @@ export default function CashierBookingsPage() {
     loadBookings();
     const refreshInterval = window.setInterval(() => {
       loadBookings();
-    }, 4000);
+    }, 3000);
 
     const clockInterval = window.setInterval(() => {
       setNow(Date.now());
@@ -263,7 +263,7 @@ export default function CashierBookingsPage() {
     };
   }, [date]);
 
-  // دالة موحدة لتحديث حالة الحجز وتسجيل الدفع التلقائي عند الإنهاء
+  // تحديث حالة الحجز مع التحديث المحلي الفوري (Instant State Update)
   async function updateBooking(bookingId: string, status: BookingStatus) {
     if (updating) return;
 
@@ -271,10 +271,10 @@ export default function CashierBookingsPage() {
     setError("");
 
     try {
-      // إرسال الطلب بتسجيل الدفع التلقائي إذا كانت الحالة COMPLETED
-      const bodyPayload = status === "COMPLETED" 
-        ? { bookingId, status, action: "PAY_CASH" }
-        : { bookingId, status };
+      const bodyPayload =
+        status === "COMPLETED"
+          ? { bookingId, status, action: "PAY_CASH" }
+          : { bookingId, status };
 
       const response = await fetch("/api/cashier/bookings", {
         method: "PATCH",
@@ -286,6 +286,11 @@ export default function CashierBookingsPage() {
       if (!response.ok) {
         throw new Error(data.error || "تعذر تحديث الحجز.");
       }
+
+      // تحديث محلي فوري للحالة حتى تنتقل للون الأصفر (CONFIRMED) أو الأخضر فوراً دون انتظار
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
+      );
 
       await loadBookings();
     } catch (err) {
@@ -359,13 +364,9 @@ export default function CashierBookingsPage() {
       <div className={styles.container}>
         <header className={styles.header}>
           <div>
-            <div className={styles.kicker}>
-              NINJA ZONE / BOOKING CONTROL
-            </div>
+            <div className={styles.kicker}>NINJA ZONE / BOOKING CONTROL</div>
             <h1>إدارة الحجوزات</h1>
-            <p>
-              متابعة حركة الجلسات، تأكيد الحجوزات، وإنهاء الحسابات بنقرة واحدة.
-            </p>
+            <p>متابعة حركة الجلسات، تأكيد الحجوزات، وإنهاء الحسابات بنقرة واحدة.</p>
           </div>
 
           <Link href="/cashier" className={styles.backButton}>
