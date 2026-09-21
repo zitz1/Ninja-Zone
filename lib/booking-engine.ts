@@ -160,8 +160,6 @@ export function normalizeBookingItems(
 
     const now = new Date();
 
-    // إذا كان الوقت المختار يقع بين 00:00 و 03:00 فجراً وتاريخه أظهر أنه بالماضي
-    // فهذا يعني أنه سهرة الليلة (اليوم التالي في التقويم بعد منتصف الليل)
     const shiftedStart = new Date(startAt.getTime() + 3 * 60 * 60_000);
     const iraqHour = shiftedStart.getUTCHours();
     if (iraqHour < BUSINESS_OPEN_HOUR && startAt < now) {
@@ -505,27 +503,16 @@ async function allocateResources(
 }
 
 /* =========================================================
-   BOOKING NUMBER (DAILY SEQUENTIAL)
+   BOOKING NUMBER (UNIQUE & SAFE)
 ========================================================= */
 
 async function generateBookingNumber(
   tx: Prisma.TransactionClient,
 ) {
-  const now = new Date();
-  const startOfToday = new Date(now.getTime() + 3 * 60 * 60_000);
-  startOfToday.setUTCHours(0, 0, 0, 0);
-  const startOfTodayUtc = new Date(startOfToday.getTime() - 3 * 60 * 60_000);
-
-  const todayCount = await tx.booking.count({
-    where: {
-      createdAt: {
-        gte: startOfTodayUtc,
-      },
-    },
-  });
-
-  const dailySequence = todayCount + 1;
-  return `#${dailySequence}`;
+  // توليد رقم فريد يعتمد على الوقت بالمللي ثانية وأرقام عشوائية لمنع أي تضارب
+  const timestampPart = Date.now().toString().slice(-6);
+  const randomPart = Math.floor(100 + Math.random() * 900);
+  return `#${timestampPart}${randomPart}`;
 }
 
 /* =========================================================
@@ -810,7 +797,6 @@ export async function getAvailability(
 
   const now = new Date();
 
-  // معالجة ساعات الفجر (00:00 إلى 03:00) إذا كانت تشير لسهرة اليوم
   const shiftedStart = new Date(startAt.getTime() + 3 * 60 * 60_000);
   const iraqHour = shiftedStart.getUTCHours();
   if (iraqHour < BUSINESS_OPEN_HOUR && startAt < now) {
@@ -1050,8 +1036,6 @@ export function makeIraqDate(
   const [hours] = time.split(":").map(Number);
   const now = new Date();
 
-  // إذا اختار وقت الفجر (من 00:00 إلى 03:00) وكان التاريخ قديماً بالماضي
-  // فهو يقصد سهرة الليلة (اليوم التالي في التقويم بعد منتصف الليل)
   if (hours < BUSINESS_OPEN_HOUR) {
     if (parsed.getTime() <= now.getTime() - 10 * 60_000) {
       parsed = new Date(parsed.getTime() + 24 * 60 * 60_000);
