@@ -9,7 +9,7 @@ import { prisma } from "./prisma";
 export const MIN_BOOKING_MINUTES = 30;
 export const SLOT_MINUTES = 30;
 export const MAX_BOOKING_DAYS = 7;
-export const PENDING_TTL_MINUTES = 15;
+export const PENDING_TTL_MINUTES = 30;
 export const GRACE_PERIOD_MINUTES = 15;
 
 export const BUSINESS_OPEN_HOUR = 10;
@@ -251,7 +251,7 @@ async function expirePendingBookings(
     where: {
       status: BookingStatus.PENDING,
       expiresAt: {
-        lt: now,
+        lt: new Date(now.getTime() - 60 * 60_000),
       },
     },
     data: {
@@ -503,16 +503,27 @@ async function allocateResources(
 }
 
 /* =========================================================
-   BOOKING NUMBER (UNIQUE & SAFE)
+   BOOKING NUMBER (SEQUENTIAL #1, #2, #3...)
 ========================================================= */
 
 async function generateBookingNumber(
   tx: Prisma.TransactionClient,
 ) {
-  // توليد رقم فريد يعتمد على الوقت بالمللي ثانية وأرقام عشوائية لمنع أي تضارب
-  const timestampPart = Date.now().toString().slice(-6);
-  const randomPart = Math.floor(100 + Math.random() * 900);
-  return `#${timestampPart}${randomPart}`;
+  const now = new Date();
+  const iraqTime = new Date(now.getTime() + 3 * 60 * 60_000);
+  iraqTime.setUTCHours(0, 0, 0, 0);
+  const startOfDayUtc = new Date(iraqTime.getTime() - 3 * 60 * 60_000);
+
+  const countToday = await tx.booking.count({
+    where: {
+      createdAt: {
+        gte: startOfDayUtc,
+      },
+    },
+  });
+
+  const seq = countToday + 1;
+  return `#${seq}`;
 }
 
 /* =========================================================
