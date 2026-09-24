@@ -333,14 +333,27 @@ export async function POST(request: Request) {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        const countRows = await tx.$queryRaw<Array<{ count: bigint }>>`
-          SELECT COUNT(*)::bigint as count
-          FROM "MenuOrder"
-          WHERE "createdAt" >= ${startOfToday}
-        `;
+        // التعديل هنا: استخدام حلقة while للتأكد من عدم تضارب رقم الطلب
+        let attempt = 0;
+        while (attempt < 10) {
+          const countRows = await tx.$queryRaw<Array<{ count: bigint }>>`
+            SELECT COUNT(*)::bigint as count
+            FROM "MenuOrder"
+            WHERE "createdAt" >= ${startOfToday}
+          `;
 
-        const dailyCount = Number(countRows[0]?.count ?? 0) + 1;
-        orderNumber = `#${String(dailyCount).padStart(3, "0")}`;
+          const dailyCount = Number(countRows[0]?.count ?? 0) + 1 + attempt;
+          orderNumber = `#${String(dailyCount).padStart(3, "0")}`;
+
+          const exists = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "MenuOrder" WHERE "orderNumber" = ${orderNumber}
+          `;
+
+          if (exists.length === 0) {
+            break;
+          }
+          attempt++;
+        }
 
         const inserted =
           await tx.$queryRaw<

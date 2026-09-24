@@ -15,25 +15,12 @@ export const revalidate = 0;
 
 async function requireCashier() {
   const session = await getSession();
-
   if (!session) {
-    return {
-      error: NextResponse.json(
-        { error: "غير مصرح لك بالوصول." },
-        { status: 401 }
-      ),
-    };
+    return { error: NextResponse.json({ error: "غير مصرح لك بالوصول." }, { status: 401 }) };
   }
-
   if (session.role !== "CASHIER" && session.role !== "ADMIN") {
-    return {
-      error: NextResponse.json(
-        { error: "ليس لديك صلاحية لإدارة الحجوزات." },
-        { status: 403 }
-      ),
-    };
+    return { error: NextResponse.json({ error: "ليس لديك صلاحية لإدارة الحجوزات." }, { status: 403 }) };
   }
-
   return { session };
 }
 
@@ -64,10 +51,7 @@ async function buildBookingView(bookingIds: string[]) {
   const paid = new Map<string, number>();
   for (const payment of payments) {
     if (payment.status !== PaymentStatus.PAID) continue;
-    paid.set(
-      payment.bookingId,
-      (paid.get(payment.bookingId) || 0) + payment.amount
-    );
+    paid.set(payment.bookingId, (paid.get(payment.bookingId) || 0) + payment.amount);
   }
 
   const bookings = await prisma.booking.findMany({
@@ -75,9 +59,7 @@ async function buildBookingView(bookingIds: string[]) {
     select: {
       id: true,
       totalAmount: true,
-      invoices: {
-        select: { id: true, invoiceNumber: true, paymentStatus: true },
-      },
+      invoices: { select: { id: true, invoiceNumber: true, paymentStatus: true } },
     },
   });
 
@@ -86,9 +68,7 @@ async function buildBookingView(bookingIds: string[]) {
       const amount = paid.get(booking.id) || 0;
       const paymentStatus =
         booking.invoices?.paymentStatus ??
-        (amount >= booking.totalAmount
-          ? PaymentStatus.PAID
-          : PaymentStatus.PENDING);
+        (amount >= booking.totalAmount ? PaymentStatus.PAID : PaymentStatus.PENDING);
 
       return [
         booking.id,
@@ -122,10 +102,10 @@ export async function GET(request: NextRequest) {
       const date = urlDate || iraqToday();
       const { start, end } = iraqDayRange(date);
       
-      // جلب حجوزات اليوم المحدد + دمج أي حجز جديد PENDING في أي تاريخ حتى يظهر دائماً في لوحة الكاشير
+      // التعديل الذهبي: جعل جميع الحجوزات النشطة (جديد، قيد التجهيز، جاري) تظهر دائماً للكاشير
       whereClause = {
         OR: [
-          { status: BookingStatus.PENDING },
+          { status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.ACTIVE] } },
           { startAt: { gte: start, lte: end } },
           { endAt: { gte: start, lte: end } },
           { startAt: { lte: start }, endAt: { gte: end } },
@@ -136,7 +116,7 @@ export async function GET(request: NextRequest) {
     const bookings = await prisma.booking.findMany({
       where: whereClause,
       orderBy: [
-        { status: "asc" }, // إظهار PENDING في البداية دائماً
+        { status: "asc" },
         { startAt: "asc" },
         { createdAt: "asc" },
       ],
@@ -146,9 +126,7 @@ export async function GET(request: NextRequest) {
         items: {
           orderBy: { startAt: "asc" },
           include: {
-            resource: {
-              select: { id: true, code: true, name: true, type: true, status: true },
-            },
+            resource: { select: { id: true, code: true, name: true, type: true, status: true } },
           },
         },
       },
@@ -161,12 +139,8 @@ export async function GET(request: NextRequest) {
       bookings: bookings.map((booking) => {
         const payment = paymentMap.get(booking.id);
         const paidAmount = payment?.paidAmount || 0;
-        const remainingAmount =
-          payment?.remainingAmount ?? booking.totalAmount;
-        const paymentStatus =
-          payment?.paymentStatus ??
-          booking.invoices?.paymentStatus ??
-          PaymentStatus.PENDING;
+        const remainingAmount = payment?.remainingAmount ?? booking.totalAmount;
+        const paymentStatus = payment?.paymentStatus ?? booking.invoices?.paymentStatus ?? PaymentStatus.PENDING;
 
         return {
           ...booking,
@@ -177,8 +151,7 @@ export async function GET(request: NextRequest) {
           remainingAmount,
           payment: {
             invoiceId: payment?.invoiceId ?? booking.invoices?.id ?? null,
-            invoiceNumber:
-              payment?.invoiceNumber ?? booking.invoices?.invoiceNumber ?? null,
+            invoiceNumber: payment?.invoiceNumber ?? booking.invoices?.invoiceNumber ?? null,
             totalAmount: booking.totalAmount,
             paidAmount,
             remainingAmount,
@@ -198,53 +171,34 @@ export async function PATCH(request: NextRequest) {
     const auth = await requireCashier();
     if ("error" in auth) return auth.error;
 
-    const body = (await request.json()) as {
-      bookingId?: string;
-      status?: BookingStatus;
-      action?: string;
-    };
+    const body = (await request.json()) as { bookingId?: string; status?: BookingStatus; action?: string };
 
-    if (!body.bookingId) {
-      return NextResponse.json({ error: "رقم الحجز مطلوب." }, { status: 400 });
-    }
+    if (!body.bookingId) return NextResponse.json({ error: "رقم الحجز مطلوب." }, { status: 400 });
 
     const booking = await prisma.booking.findUnique({
       where: { id: body.bookingId },
       include: { items: true, invoices: true },
     });
 
-    if (!booking) {
-      return NextResponse.json({ error: "الحجز غير موجود." }, { status: 404 });
-    }
+    if (!booking) return NextResponse.json({ error: "الحجز غير موجود." }, { status: 404 });
 
     let nextStatus: BookingStatus = body.status || booking.status;
-    if (body.action === "START_AND_PAY") {
-      nextStatus = BookingStatus.ACTIVE;
-    }
+    if (body.action === "START_AND_PAY") nextStatus = BookingStatus.ACTIVE;
 
     const updated = await prisma.$transaction(
       async (tx) => {
         if (nextStatus === BookingStatus.ACTIVE) {
           for (const item of booking.items) {
             if (item.resourceId) {
-              await tx.resource.update({
-                where: { id: item.resourceId },
-                data: { status: ResourceStatus.PLAYING },
-              });
+              await tx.resource.update({ where: { id: item.resourceId }, data: { status: ResourceStatus.PLAYING } });
             }
           }
         }
 
-        if (
-          nextStatus === BookingStatus.COMPLETED ||
-          nextStatus === BookingStatus.CANCELLED
-        ) {
+        if (nextStatus === BookingStatus.COMPLETED || nextStatus === BookingStatus.CANCELLED) {
           for (const item of booking.items) {
             if (item.resourceId) {
-              await tx.resource.update({
-                where: { id: item.resourceId },
-                data: { status: ResourceStatus.AVAILABLE },
-              });
+              await tx.resource.update({ where: { id: item.resourceId }, data: { status: ResourceStatus.AVAILABLE } });
             }
           }
         }
@@ -266,10 +220,7 @@ export async function PATCH(request: NextRequest) {
               },
             });
           } else {
-            await tx.invoice.update({
-              where: { id: invoice.id },
-              data: { paymentStatus: PaymentStatus.PAID },
-            });
+            await tx.invoice.update({ where: { id: invoice.id }, data: { paymentStatus: PaymentStatus.PAID } });
           }
 
           const existingPayment = await tx.payment.findFirst({
@@ -298,9 +249,7 @@ export async function PATCH(request: NextRequest) {
           data: {
             status: nextStatus,
             expiresAt: null,
-            ...(nextStatus === BookingStatus.CONFIRMED
-              ? { approvedAt: new Date(), approvedById: auth.session.id }
-              : {}),
+            ...(nextStatus === BookingStatus.CONFIRMED ? { approvedAt: new Date(), approvedById: auth.session.id } : {}),
           },
           include: {
             user: { select: { id: true, name: true, phone: true } },
@@ -312,15 +261,9 @@ export async function PATCH(request: NextRequest) {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
 
-    return NextResponse.json({
-      booking: updated,
-      message: "تم تحديث الحجز بنجاح.",
-    });
+    return NextResponse.json({ booking: updated, message: "تم تحديث الحجز بنجاح." });
   } catch (error) {
     console.error("Cashier bookings PATCH error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "تعذر تنفيذ العملية." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : "تعذر تنفيذ العملية." }, { status: 500 });
   }
 }
