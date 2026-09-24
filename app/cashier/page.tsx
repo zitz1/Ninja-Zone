@@ -28,9 +28,12 @@ function playDashboardAlert() {
 
 export default function CashierDashboard() {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [isReady, setIsReady] = useState(false);
   const prevCount = useRef<number | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     async function checkLiveOrders() {
       try {
         const res = await fetch("/api/menu/orders?t=" + Date.now(), { cache: "no-store" });
@@ -42,17 +45,31 @@ export default function CashierDashboard() {
             playDashboardAlert();
           }
           prevCount.current = count;
-          setPendingOrdersCount(count);
+          if (mounted) setPendingOrdersCount(count);
         }
       } catch {
         //
+      } finally {
+        if (mounted) setIsReady(true);
       }
     }
 
     checkLiveOrders();
     const timer = setInterval(checkLiveOrders, 4000);
-    return () => clearInterval(timer);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
   }, []);
+
+  // منع الشاشة البيضاء تماماً وعرض مؤشر تحميل أنيق
+  if (!isReady) {
+    return (
+      <main className="page" dir="rtl" style={{ justifyContent: "center", alignItems: "center" }}>
+        <div style={{ color: "#8b5cf6", fontSize: "14px", fontWeight: "bold" }}>جاري تحميل لوحة الكاشير...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="page" dir="rtl">

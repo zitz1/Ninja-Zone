@@ -419,3 +419,22 @@ body {
     display: inline-block !important;
   }
 }
+/* إخفاء إجباري لأي عنصر عدد أجهزة يظهر على اليسار في الموبايل */
+@media (max-width: 900px) {
+  .nz-category-image span:first-child,
+  .nz-reference-image span:first-child,
+  .nz-category-image div:first-child,
+  .nz-reference-image div:first-child {
+    display: none !important;
+  }
+  
+  /* تثبيت الباج الحقيقي الوحيد على اليمين */
+  .nz-category-badge,
+  .nz-reference-badge {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    left: auto !important;
+    display: block !important;
+  }
+}
