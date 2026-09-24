@@ -398,3 +398,24 @@ body {
     padding: 8px 12px !important;
   }
 }
+/* --- إصلاح نهائي لإلغاء أي باج مكرر أو مخربط على اليسار في الموبايل --- */
+@media (max-width: 900px) {
+  /* إخفاء أي عنصر تكرار قديم على اليسار */
+  .nz-category-image::before,
+  .nz-reference-image::before,
+  .nz-category-image span:not(.nz-category-badge),
+  .nz-reference-image span:not(.nz-reference-badge) {
+    display: none !important;
+  }
+
+  /* إثبات مكان الباج الصحيح على اليمين وبشكل نظيف جداً */
+  .nz-category-badge,
+  .nz-reference-badge {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    left: auto !important;
+    z-index: 10 !important;
+    display: inline-block !important;
+  }
+}
