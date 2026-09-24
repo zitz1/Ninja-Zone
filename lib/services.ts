@@ -36,3 +36,18 @@ export function formatDuration(minutes: number) {
   const mins = minutes % 60;
   return mins ? `${hours}:${String(mins).padStart(2, "0")} ساعة` : `${hours} ساعة`;
 }
+
+// 🔥 هذه الدالة الذكية لضبط قواعد الجمع والمثنى في اللغة العربية بامتياز
+export function formatResourceCount(count: number, type: string = ""): string {
+  const isTable = type === "TABLE" || type === "BILLIARD";
+  const single = isTable ? "طاولة واحدة" : "جهاز واحد";
+  const double = isTable ? "طاولتان" : "جهازان";
+  const plural = isTable ? "طاولات" : "أجهزة";
+  const plural11 = isTable ? "طاولة" : "جهازاً";
+
+  if (count === 0) return "محدود";
+  if (count === 1) return single;
+  if (count === 2) return double;
+  if (count >= 3 && count <= 10) return `${count} ${plural}`;
+  return `${count} ${plural11}`;
+}

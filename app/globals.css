@@ -352,3 +352,49 @@
 body {
   padding-bottom: 120px !important;
 }
+/* --- إصلاحات شكل الأقسام والباج في الموبايل --- */
+@media (max-width: 768px) {
+  /* ترتيب البطاقات لتكون بشكل شبكة من عمودين أو عمود واحد أنيق */
+  .nz-reference-grid, .nz-category-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  
+  /* المحافظة على نسبة طول وعرض الصورة لتجنب التمطط */
+  .nz-reference-image, .nz-category-image {
+    aspect-ratio: 4/3 !important;
+    height: auto !important;
+  }
+
+  /* ضبط الباج (عدد الأجهزة) ليكون واضحاً وغير مكسر */
+  .nz-category-badge, .nz-reference-badge {
+    top: 8px !important;
+    right: 8px !important;
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(5px) !important;
+    /* أوامر التنعيم الإجبارية لمنع التكسر */
+    -webkit-font-smoothing: antialiased !important;
+    transform: translateZ(0) !important;
+    white-space: nowrap !important;
+  }
+
+  /* توضيح نصوص الأقسام من الأسفل */
+  .nz-reference-body h2, .nz-category-body strong {
+    font-size: 15px !important;
+    text-align: right !important;
+  }
+}
+
+/* إذا كانت الشاشة صغيرة جداً (آيفون ميني مثلاً)، اجعلها عموداً واحداً كبيراً وواضحاً */
+@media (max-width: 400px) {
+  .nz-reference-grid, .nz-category-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .nz-category-badge, .nz-reference-badge {
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+  }
+}

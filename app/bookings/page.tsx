@@ -42,6 +42,8 @@ const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }
   EXPIRED: { label: "منتهي", color: "#7c8492", bg: "rgba(124,132,146,.08)" },
   NO_SHOW: { label: "لم يحضر", color: "#f5c451", bg: "rgba(245,196,81,.1)" },
   REJECTED: { label: "مرفوض", color: "#ff4d67", bg: "rgba(255,77,103,.1)" },
+  PREPARING: { label: "جاري التحضير", color: "#f5c451", bg: "rgba(245,196,81,.1)" },
+  READY: { label: "جاهز للاستلام", color: "#31d48b", bg: "rgba(49,212,139,.1)" },
 };
 
 const RESOURCE_LABELS: Record<string, string> = {
@@ -75,6 +77,8 @@ function formatTime(value: string) {
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [menuOrders, setMenuOrders] = useState<any[]>([]);
+  const [view, setView] = useState<"BOOKINGS" | "MENU">("BOOKINGS");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("ALL");
@@ -95,6 +99,7 @@ export default function BookingsPage() {
       }
 
       setBookings(Array.isArray(data.bookings) ? data.bookings : []);
+      setMenuOrders(Array.isArray(data.menuOrders) ? data.menuOrders : []);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل الحجوزات.");
@@ -168,6 +173,17 @@ export default function BookingsPage() {
         )}
 
         {!error && (
+          <div className="nz-bookings-tabs nz-view-switch" style={{ marginBottom: "24px", display: "flex", gap: "10px" }}>
+            <button className={view === "BOOKINGS" ? "active" : ""} onClick={() => setView("BOOKINGS")} style={{ flex: 1, padding: "12px", fontSize: "14px" }}>
+              حجوزات الأجهزة 🎮
+            </button>
+            <button className={view === "MENU" ? "active" : ""} onClick={() => setView("MENU")} style={{ flex: 1, padding: "12px", fontSize: "14px" }}>
+              طلبات المنيو 🍔
+            </button>
+          </div>
+        )}
+
+        {view === "BOOKINGS" && !error && (
           <>
             <div className="nz-bookings-tabs">
               <button className={filter === "ALL" ? "active" : ""} onClick={() => setFilter("ALL")}>
@@ -318,6 +334,107 @@ export default function BookingsPage() {
                               </button>
                             </div>
                           )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {view === "MENU" && !error && (
+          <>
+            {loading ? (
+              <div className="nz-bookings-loading">
+                <div className="nz-loader" />
+                <span>جاري تحميل طلبات المنيو...</span>
+              </div>
+            ) : menuOrders.length === 0 ? (
+              <div className="nz-empty-page">
+                <div className="nz-empty-mark">🍔</div>
+                <h2>لا توجد طلبات</h2>
+                <p>لم تقم بأي طلب من المنيو حتى الآن.</p>
+                <Link className="nz-btn nz-btn-primary" href="/menu">
+                  اطلب الآن ↗
+                </Link>
+              </div>
+            ) : (
+              <div className="nz-bookings-list">
+                {menuOrders.map((order) => {
+                  const status = STATUS_LABELS[order.status] || STATUS_LABELS.PENDING;
+                  const isOpen = openBookingId === order.id;
+
+                  return (
+                    <article className={`nz-booking-card ${isOpen ? "open" : ""}`} key={order.id}>
+                      <button
+                        type="button"
+                        className="nz-booking-summary-btn"
+                        onClick={() => setOpenBookingId(isOpen ? null : order.id)}
+                        aria-expanded={isOpen}
+                      >
+                        <div className="nz-booking-summary-right">
+                          <div className="nz-booking-avatar" style={{ background: "rgba(245,196,81,0.12)", color: "#f5c451", border: "1px solid rgba(245,196,81,0.25)", fontSize: "18px" }}>
+                            🍔
+                          </div>
+
+                          <div>
+                            <div className="nz-booking-title-row">
+                              <strong>{order.orderNumber}</strong>
+                              <span className="nz-booking-res-name">
+                                طلب منيو
+                              </span>
+                            </div>
+                            <small className="nz-booking-time-preview">
+                              {formatDate(order.createdAt)} • {formatTime(order.createdAt)}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="nz-booking-summary-left">
+                          <strong className="nz-booking-price-preview">{money(order.totalAmount)}</strong>
+                          <span className="nz-booking-status" style={{ color: status.color, background: status.bg }}>
+                            <i style={{ background: status.color }} />
+                            {status.label}
+                          </span>
+                          <span className={`nz-accordion-chevron ${isOpen ? "open" : ""}`}>›</span>
+                        </div>
+                      </button>
+
+                      {isOpen && (
+                        <div className="nz-booking-dropdown-content">
+                          <div className="nz-booking-dates" style={{ gridTemplateColumns: "1fr 1fr" }}>
+                            <div>
+                              <span>مكان التوصيل</span>
+                              <strong>{order.locationType}</strong>
+                            </div>
+                            <div>
+                              <span>الرقم / العلامة</span>
+                              <strong>{order.locationLabel}</strong>
+                            </div>
+                          </div>
+
+                          <div className="nz-booking-items">
+                            <span className="nz-items-label">الأصناف المطلوبة:</span>
+                            {order.items.map((item: any, idx: number) => (
+                              <div className="nz-booking-item" key={idx}>
+                                <span className="nz-booking-item-icon" style={{ background: "rgba(245,196,81,0.1)", color: "#f5c451" }}>
+                                  ✓
+                                </span>
+                                <div>
+                                  <strong>{item.itemName}</strong>
+                                  <small>الكمية: {item.quantity}</small>
+                                </div>
+                                <strong className="nz-booking-item-price">{money(item.totalPrice)}</strong>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="nz-booking-total">
+                            <span>المبلغ الإجمالي</span>
+                            <strong style={{ color: "#31d48b" }}>{money(order.totalAmount)}</strong>
+                          </div>
                         </div>
                       )}
                     </article>

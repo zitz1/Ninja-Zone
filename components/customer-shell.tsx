@@ -201,11 +201,12 @@ export function CustomerShell({
           }
         }
 
-        const ordersRes = await fetch(`/api/menu/orders?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
+        // --- التعديل هنا: جلب طلبات المنيو من مسار العميل المسموح له ---
+        const ordersRes = await fetch(`/api/my-bookings?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
         if (ordersRes && ordersRes.ok) {
           const oData = await ordersRes.json();
-          if (Array.isArray(oData.orders)) {
-            const currentOrder = oData.orders.find((o: CustomerOrder) =>
+          if (Array.isArray(oData.menuOrders)) {
+            const currentOrder = oData.menuOrders.find((o: CustomerOrder) =>
               o.status === "PENDING" || o.status === "PREPARING" || o.status === "READY"
             );
 
@@ -398,8 +399,8 @@ export function CustomerShell({
                 <small>تم تحديث حالة طلبك للتو</small>
               </div>
             </div>
-            <Link href="/menu" className="nz-tracker-btn">
-              المنيو ←
+            <Link href="/bookings" className="nz-tracker-btn">
+              حجوزاتي ←
             </Link>
           </div>
         )}

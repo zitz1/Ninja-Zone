@@ -1,76 +1,60 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
-
     if (!session) {
-      return NextResponse.json(
-        { error: "يجب تسجيل الدخول لعرض حجوزاتك." },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "يجب تسجيل الدخول." }, { status: 401 });
     }
 
+    // 1. جلب حجوزات الأجهزة الخاصة بالعميل
     const bookings = await prisma.booking.findMany({
-      where: {
-        userId: session.id,
-      },
-      orderBy: {
-        startAt: "desc",
-      },
-      take: 50,
+      where: { userId: session.id },
+      orderBy: { createdAt: "desc" },
       include: {
         items: {
-          orderBy: {
-            startAt: "asc",
-          },
           include: {
-            resource: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                type: true,
-              },
-            },
+            resource: { select: { id: true, code: true, name: true, type: true } },
           },
         },
       },
     });
 
-    return NextResponse.json({
-      bookings: bookings.map((booking) => ({
-        id: booking.id,
-        bookingNumber: booking.bookingNumber,
-        status: booking.status,
-        startAt: booking.startAt.toISOString(),
-        endAt: booking.endAt.toISOString(),
-        totalAmount: booking.totalAmount,
-        customerNote: booking.customerNote,
-        createdAt: booking.createdAt.toISOString(),
-        items: booking.items.map((item) => ({
-          id: item.id,
-          resourceType: item.resourceType,
-          resourceId: item.resourceId,
-          startAt: item.startAt.toISOString(),
-          endAt: item.endAt.toISOString(),
-          durationMinutes: item.durationMinutes,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          resource: item.resource,
-        })),
-      })),
-    });
+    // 2. جلب طلبات المنيو الخاصة بالعميل (عن طريق رقم هاتفه)
+    const user = await prisma.user.findUnique({ where: { id: session.id } });
+    let menuOrders: any[] = [];
+    
+    if (user && user.phone) {
+        menuOrders = await prisma.$queryRaw<any[]>`
+          SELECT
+            o."id", o."orderNumber", o."status", o."totalAmount",
+            o."createdAt", o."locationType", o."locationLabel",
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'itemName', oi."itemName",
+                  'quantity', oi."quantity",
+                  'totalPrice', oi."totalPrice"
+                ) ORDER BY oi."itemName"
+              ) FILTER (WHERE oi."id" IS NOT NULL), '[]'::json
+            ) AS "items"
+          FROM "MenuOrder" o
+          LEFT JOIN "MenuOrderItem" oi ON oi."orderId" = o."id"
+          WHERE o."phone" = ${user.phone}
+          GROUP BY o."id"
+          ORDER BY o."createdAt" DESC
+        `;
+    }
+
+    // إرسال كلاهما للعميل في شاشة واحدة
+    return NextResponse.json({ bookings, menuOrders });
   } catch (error) {
-    console.error("GET /api/my-bookings failed:", error);
-    return NextResponse.json(
-      { error: "تعذر تحميل الحجوزات." },
-      { status: 500 },
-    );
+    console.error("My bookings GET error:", error);
+    return NextResponse.json({ error: "تعذر تحميل الحجوزات والطلبات." }, { status: 500 });
   }
 }

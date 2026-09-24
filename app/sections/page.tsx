@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CustomerShell } from "@/components/customer-shell";
 import { getServicesFromDb } from "@/lib/services-db";
-import { formatIQD } from "@/lib/services";
+import { formatIQD, formatResourceCount } from "@/lib/services";
 
 export default async function SectionsPage() {
   const SERVICES = await getServicesFromDb();
@@ -23,6 +23,10 @@ export default async function SectionsPage() {
             <Link href={`/book/${s.type}`} key={s.type} className={`nz-reference-card tone-${s.tone}`}>
               <div className="nz-reference-image">
                 <img src={s.image} alt={s.arTitle} />
+                {/* الباج الذكي الذي يتحدث بالعربية الفصحى (جهاز واحد، جهازان، 8 أجهزة) */}
+                <div className="nz-category-badge">
+                  {formatResourceCount(s.count, s.type)}
+                </div>
               </div>
               <div className="nz-reference-body">
                 <div>
