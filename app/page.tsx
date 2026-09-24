@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CustomerShell } from "@/components/customer-shell";
 import { getServicesFromDb } from "@/lib/services-db";
-import { formatIQD } from "@/lib/services";
+import { formatIQD, formatResourceCount } from "@/lib/services";
 
 export default async function Home() {
   const SERVICES = await getServicesFromDb();
@@ -42,7 +42,10 @@ export default async function Home() {
               <Link href={`/book/${service.type}`} key={service.type} className={`nz-category-card tone-${service.tone}`}>
                 <div className="nz-category-image">
                   <img src={service.image} alt={service.arTitle} />
-                  <span className="nz-category-badge">{service.count} أجهزة</span>
+                  {/* الباج الصحيح على اليمين وبدقة تامة */}
+                  <div className="nz-category-badge">
+                    {formatResourceCount(service.count, service.type)}
+                  </div>
                 </div>
                 <div className="nz-category-body">
                   <div><strong>{service.arTitle}</strong><small>{service.description}</small></div>
