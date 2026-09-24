@@ -352,52 +352,86 @@
 body {
   padding-bottom: 120px !important;
 }
-/* --- إصلاحات شكل الأقسام والباج في الموبايل --- */
+
+/* ===================================================================
+   ترتيب بطاقات الأقسام للموبايل (تصميم مربع، موسط، ونظيف جداً)
+   =================================================================== */
 @media (max-width: 768px) {
-  /* ترتيب البطاقات لتكون بشكل شبكة من عمودين أو عمود واحد أنيق */
-  .nz-reference-grid, .nz-category-grid {
+  /* 1. شبكة ثنائية متساوية بمسافات دقيقة */
+  .nz-category-grid, .nz-reference-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 12px !important;
+    gap: 14px !important;
+    padding: 0 5px !important;
   }
-  
-  /* المحافظة على نسبة طول وعرض الصورة لتجنب التمطط */
-  .nz-reference-image, .nz-category-image {
-    aspect-ratio: 4/3 !important;
+
+  /* 2. هيكل البطاقة (حواف دائرية أنيقة وخلفية داكنة متجانسة) */
+  .nz-category-card, .nz-reference-card {
+    border-radius: 18px !important;
+    background: #11131a !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  /* 3. ترتيب الصورة لتكون في النصف العلوي بأبعاد مريحة للعين */
+  .nz-category-image, .nz-reference-image {
+    aspect-ratio: 4 / 3 !important;
     height: auto !important;
+    border-radius: 18px 18px 0 0 !important;
   }
 
-  /* ضبط الباج (عدد الأجهزة) ليكون واضحاً وغير مكسر */
-  .nz-category-badge, .nz-reference-badge {
-    top: 8px !important;
-    right: 8px !important;
-    padding: 6px 10px !important;
-    font-size: 11px !important;
-    font-weight: 800 !important;
-    border-radius: 8px !important;
-    backdrop-filter: blur(5px) !important;
-    /* أوامر التنعيم الإجبارية لمنع التكسر */
-    -webkit-font-smoothing: antialiased !important;
-    transform: translateZ(0) !important;
-    white-space: nowrap !important;
+  /* 4. توسيط النصوص وترتيبها في المنتصف */
+  .nz-category-body, .nz-reference-body {
+    padding: 14px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 8px !important;
+    min-height: auto !important;
   }
 
-  /* توضيح نصوص الأقسام من الأسفل */
-  .nz-reference-body h2, .nz-category-body strong {
+  /* 5. ضبط حجم العناوين */
+  .nz-category-body strong, .nz-reference-body h2 {
     font-size: 15px !important;
-    text-align: right !important;
+    font-weight: 800 !important;
+    color: #f6f7fb !important;
+    margin: 0 !important;
+  }
+
+  /* 6. إخفاء الوصف الطويل لتقليل الازدحام وجعل الكارت نظيفاً */
+  .nz-category-body small, .nz-reference-body p {
+    display: none !important;
+  }
+
+  /* 7. توسيط السعر وتلوينه بلون بارز */
+  .nz-category-price, .nz-reference-price {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 4px !important;
+    margin: 0 !important;
+    flex-direction: row-reverse !important;
+  }
+
+  .nz-category-price b, .nz-reference-price strong {
+    font-size: 14px !important;
+    color: #ff4d67 !important; /* لون أحمر مميز للسعر */
+  }
+
+  .nz-category-price span, .nz-reference-price span {
+    font-size: 10px !important;
+    color: #798293 !important;
+  }
+
+  /* 8. إخفاء الشريط السفلي (احجز الآن) لتوفير المساحة */
+  .nz-category-bottom, .nz-reference-action {
+    display: none !important;
   }
 }
 
-/* إذا كانت الشاشة صغيرة جداً (آيفون ميني مثلاً)، اجعلها عموداً واحداً كبيراً وواضحاً */
-@media (max-width: 400px) {
-  .nz-reference-grid, .nz-category-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .nz-category-badge, .nz-reference-badge {
-    font-size: 12px !important;
-    padding: 8px 12px !important;
-  }
-}
 /* --- إصلاح نهائي لإلغاء أي باج مكرر أو مخربط على اليسار في الموبايل --- */
 @media (max-width: 900px) {
   /* إخفاء أي عنصر تكرار قديم على اليسار */
@@ -419,6 +453,7 @@ body {
     display: inline-block !important;
   }
 }
+
 /* إخفاء إجباري لأي عنصر عدد أجهزة يظهر على اليسار في الموبايل */
 @media (max-width: 900px) {
   .nz-category-image span:first-child,
