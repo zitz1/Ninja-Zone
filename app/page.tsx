@@ -42,8 +42,8 @@ export default async function Home() {
               <Link href={`/book/${service.type}`} key={service.type} className={`nz-category-card tone-${service.tone}`}>
                 <div className="nz-category-image">
                   <img src={service.image} alt={service.arTitle} />
-                  {/* الباج الصحيح على اليمين وبدقة تامة */}
-                  <div className="nz-category-badge">
+                  {/* الباج الصحيح والنظيف الوحيد، تم إزالة أي تكرار */}
+                  <div className="nz-category-badge" style={{ position: "absolute", top: "10px", right: "10px", zIndex: 10 }}>
                     {formatResourceCount(service.count, service.type)}
                   </div>
                 </div>
